@@ -1,5 +1,3 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001"
-
 export function getToken(): string | null {
 	if (typeof document === "undefined") return null
 	const match = document.cookie.match(/(?:^|; )session=([^;]*)/)
@@ -15,7 +13,7 @@ export async function apiFetch<T>(
 	options?: RequestInit,
 ): Promise<T> {
 	const token = getToken()
-	const res = await fetch(`${API_BASE}${path}`, {
+	const res = await fetch(`/api${path}`, {
 		...options,
 		headers: {
 			"Content-Type": "application/json",
@@ -36,8 +34,4 @@ export async function apiFetch<T>(
 		throw new Error((err as { error?: string }).error ?? res.statusText)
 	}
 	return res.json() as Promise<T>
-}
-
-export function apiUrl(path: string): string {
-	return `${API_BASE}${path}`
 }

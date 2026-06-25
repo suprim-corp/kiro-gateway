@@ -34,11 +34,10 @@ function SettingsContent() {
 					</div>
 					<div className="border-t border-border/30 pt-4">
 						<span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-							API Base URL
+							API Endpoint
 						</span>
 						<p className="mt-1 font-mono text-xs text-foreground">
-							{process.env.NEXT_PUBLIC_API_URL ??
-								"http://localhost:3001"}
+							{typeof window !== "undefined" ? `${window.location.origin}/api` : "/api"}
 						</p>
 					</div>
 					<div className="border-t border-border/30 pt-4">
