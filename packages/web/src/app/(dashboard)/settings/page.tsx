@@ -1,4 +1,8 @@
-export default function SettingsPage() {
+"use client"
+
+import { AuthGuard } from "@/components/auth-guard"
+
+function SettingsContent() {
 	return (
 		<div className="space-y-6">
 			<h1 className="font-mono text-lg font-semibold tracking-tight">
@@ -32,5 +36,13 @@ export default function SettingsPage() {
 				</div>
 			</div>
 		</div>
+	)
+}
+
+export default function SettingsPage() {
+	return (
+		<AuthGuard>
+			<SettingsContent />
+		</AuthGuard>
 	)
 }

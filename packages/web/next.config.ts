@@ -32,8 +32,6 @@ const nextConfig: NextConfig = {
 			process.env.API_URL ??
 			rootEnv.API_URL ??
 			`http://localhost:${rootEnv.PORT ?? "3001"}`,
-		NEXT_PUBLIC_ADMIN_KEY:
-			process.env.ADMIN_API_KEY ?? rootEnv.ADMIN_API_KEY ?? "",
 	},
 }
 

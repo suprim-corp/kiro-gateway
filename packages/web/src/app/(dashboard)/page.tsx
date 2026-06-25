@@ -2,7 +2,8 @@
 
 import { Activity, Key, ScrollText, Zap } from "lucide-react"
 import useSWR from "swr"
-import { apiUrl } from "@/lib/api"
+import { AuthGuard } from "@/components/auth-guard"
+import { apiFetch } from "@/lib/api"
 
 interface Stats {
 	totalRequests: number
@@ -12,16 +13,6 @@ interface Stats {
 	avgLatencyMs: number
 	uptimeSeconds: number
 }
-
-const fetcher = (url: string) =>
-	fetch(url, {
-		headers: {
-			Authorization: `Bearer ${process.env.NEXT_PUBLIC_ADMIN_KEY ?? ""}`,
-		},
-	}).then((r) => {
-		if (!r.ok) throw new Error(`${r.status}`)
-		return r.json()
-	})
 
 function StatCard({
 	label,
@@ -67,10 +58,10 @@ function formatUptime(seconds: number): string {
 	return `${m}m`
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
 	const { data, isLoading, error } = useSWR<Stats>(
-		apiUrl("/admin/stats"),
-		fetcher,
+		"stats",
+		() => apiFetch("/admin/stats"),
 		{ refreshInterval: 5000 },
 	)
 
@@ -85,9 +76,7 @@ export default function DashboardPage() {
 				</h1>
 				<p className="font-mono text-xs text-muted-foreground max-w-md text-center leading-relaxed">
 					Could not connect to the API. Make sure the backend is
-					running and{" "}
-					<code className="text-neon-cyan">ADMIN_API_KEY</code> is set
-					in <code className="text-neon-cyan">.env</code>.
+					running.
 				</p>
 			</div>
 		)
@@ -145,5 +134,13 @@ export default function DashboardPage() {
 				/>
 			</div>
 		</div>
+	)
+}
+
+export default function DashboardPage() {
+	return (
+		<AuthGuard>
+			<DashboardContent />
+		</AuthGuard>
 	)
 }

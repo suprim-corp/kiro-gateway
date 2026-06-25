@@ -1,4 +1,5 @@
 import { Elysia } from "elysia"
+import { createSession, validateSession } from "../auth/token"
 import { env } from "../config"
 import { getStats, queryLogs } from "../logging"
 import {
@@ -9,10 +10,28 @@ import {
 	updateKey,
 } from "../virtual-keys"
 
-export const adminRoutes = new Elysia({ prefix: "/admin" })
+const loginRoute = new Elysia({ prefix: "/admin" }).post(
+	"/login",
+	({ body, set }) => {
+		const { password } = body as { password?: string }
+		if (!password || password !== env.ADMIN_API_KEY) {
+			set.status = 401
+			return { error: "Invalid password" }
+		}
+		const token = createSession()
+		return { token }
+	},
+)
+
+const protectedRoutes = new Elysia({ prefix: "/admin" })
 	.onBeforeHandle(({ headers, set }) => {
-		const auth = headers.authorization
-		if (auth !== `Bearer ${env.ADMIN_API_KEY}`) {
+		const auth = headers.authorization?.replace("Bearer ", "")
+		if (!auth) {
+			set.status = 401
+			return { error: "Unauthorized" }
+		}
+		if (auth === env.ADMIN_API_KEY) return
+		if (!validateSession(auth)) {
 			set.status = 401
 			return { error: "Unauthorized" }
 		}
@@ -139,3 +158,5 @@ export const adminRoutes = new Elysia({ prefix: "/admin" })
 		return { success: true }
 	})
 	.get("/accounts", () => ({ data: [] }))
+
+export const adminRoutes = new Elysia().use(loginRoute).use(protectedRoutes)

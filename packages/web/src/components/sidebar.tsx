@@ -49,7 +49,7 @@ export function Sidebar() {
 								<Link
 									key={href}
 									href={href}
-									className={`flex items-center gap-3 px-3 py-2 rounded-lg font-mono text-xs transition-colors ${
+									className={`flex items-center gap-3 px-3 py-2 rounded-lg font-mono text-xs transition-colors cursor-pointer ${
 										active
 											? "bg-neon-purple/10 text-neon-purple"
 											: "text-muted-foreground hover:text-foreground hover:bg-muted/30"

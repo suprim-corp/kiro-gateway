@@ -4,7 +4,8 @@ import { formatDistanceToNow } from "date-fns"
 import { Copy, Plus, Trash2 } from "lucide-react"
 import { useState } from "react"
 import useSWR, { mutate } from "swr"
-import { apiFetch, apiUrl } from "@/lib/api"
+import { AuthGuard } from "@/components/auth-guard"
+import { apiFetch } from "@/lib/api"
 
 interface VirtualKey {
 	id: string
@@ -23,20 +24,10 @@ interface KeysResponse {
 	data: VirtualKey[]
 }
 
-const fetcher = (url: string) =>
-	fetch(url, {
-		headers: {
-			Authorization: `Bearer ${process.env.NEXT_PUBLIC_ADMIN_KEY ?? ""}`,
-		},
-	}).then((r) => {
-		if (!r.ok) throw new Error(`${r.status}`)
-		return r.json()
-	})
-
-export default function KeysPage() {
+function KeysContent() {
 	const { data, isLoading } = useSWR<KeysResponse>(
-		apiUrl("/admin/keys"),
-		fetcher,
+		"keys",
+		() => apiFetch("/admin/keys"),
 		{ refreshInterval: 5000 },
 	)
 	const [creating, setCreating] = useState(false)
@@ -57,7 +48,7 @@ export default function KeysPage() {
 			})
 			setCreatedKey(result.key)
 			setNewKeyName("")
-			mutate(apiUrl("/admin/keys"))
+			mutate("keys")
 		} finally {
 			setCreating(false)
 		}
@@ -65,7 +56,7 @@ export default function KeysPage() {
 
 	async function handleDelete(id: string) {
 		await apiFetch(`/admin/keys/${id}`, { method: "DELETE" })
-		mutate(apiUrl("/admin/keys"))
+		mutate("keys")
 	}
 
 	async function handleToggle(id: string, enabled: boolean) {
@@ -73,7 +64,7 @@ export default function KeysPage() {
 			method: "PATCH",
 			body: JSON.stringify({ enabled: !enabled }),
 		})
-		mutate(apiUrl("/admin/keys"))
+		mutate("keys")
 	}
 
 	return (
@@ -108,7 +99,7 @@ export default function KeysPage() {
 						type="button"
 						onClick={handleCreate}
 						disabled={creating || !newKeyName.trim()}
-						className="flex items-center gap-1.5 rounded-lg bg-neon-purple/20 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-neon-purple transition-colors hover:bg-neon-purple/30 disabled:opacity-50"
+						className="flex items-center gap-1.5 rounded-lg bg-neon-purple/20 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-neon-purple transition-colors hover:bg-neon-purple/30 disabled:opacity-50 cursor-pointer"
 					>
 						<Plus className="size-3" />
 						Create
@@ -124,7 +115,7 @@ export default function KeysPage() {
 							onClick={() => {
 								navigator.clipboard.writeText(createdKey)
 							}}
-							className="text-muted-foreground hover:text-foreground"
+							className="text-muted-foreground hover:text-foreground cursor-pointer"
 							title="Copy to clipboard"
 						>
 							<Copy className="size-4" />
@@ -216,7 +207,7 @@ export default function KeysPage() {
 										onClick={() =>
 											handleToggle(key.id, key.enabled)
 										}
-										className={`font-mono text-[10px] px-2 py-0.5 rounded-md ${
+										className={`font-mono text-[10px] px-2 py-0.5 rounded-md cursor-pointer ${
 											key.enabled
 												? "bg-neon-green/10 text-neon-green"
 												: "bg-muted/30 text-muted-foreground"
@@ -229,7 +220,7 @@ export default function KeysPage() {
 									<button
 										type="button"
 										onClick={() => handleDelete(key.id)}
-										className="text-muted-foreground hover:text-destructive transition-colors"
+										className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
 										title="Delete key"
 									>
 										<Trash2 className="size-3.5" />
@@ -241,5 +232,13 @@ export default function KeysPage() {
 				</table>
 			</div>
 		</div>
+	)
+}
+
+export default function KeysPage() {
+	return (
+		<AuthGuard>
+			<KeysContent />
+		</AuthGuard>
 	)
 }
