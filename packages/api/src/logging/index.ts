@@ -14,6 +14,7 @@ export interface LogEntry {
 	latencyMs?: number
 	firstTokenMs?: number
 	streaming?: boolean
+	clientIp?: string
 	errorMessage?: string
 }
 
@@ -34,6 +35,7 @@ export function logRequest(entry: LogEntry): void {
 			latencyMs: entry.latencyMs ?? null,
 			firstTokenMs: entry.firstTokenMs ?? null,
 			streaming: entry.streaming ?? null,
+			clientIp: entry.clientIp ?? null,
 			errorMessage: entry.errorMessage ?? null,
 			createdAt: Date.now(),
 		})
@@ -62,6 +64,7 @@ export interface LogRow {
 	latencyMs: number | null
 	firstTokenMs: number | null
 	streaming: boolean | null
+	clientIp: string | null
 	errorMessage: string | null
 	createdAt: number
 }
@@ -85,6 +88,7 @@ export function queryLogs(query: LogQuery): { data: LogRow[]; total: number } {
 			latencyMs: requestLogs.latencyMs,
 			firstTokenMs: requestLogs.firstTokenMs,
 			streaming: requestLogs.streaming,
+			clientIp: requestLogs.clientIp,
 			errorMessage: requestLogs.errorMessage,
 			createdAt: requestLogs.createdAt,
 		})

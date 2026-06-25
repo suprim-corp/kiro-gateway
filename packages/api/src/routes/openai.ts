@@ -111,11 +111,14 @@ export interface ChatCompletionResponse {
 }
 
 export const openaiRoutes = new Elysia({ prefix: "/v1" })
-	.derive(async ({ headers }) => {
+	.derive(async ({ headers, request }) => {
 		const authResult = await resolveAuth(
 			headers.authorization ?? headers["x-api-key"],
 		)
-		return { authResult }
+		const clientIp = headers["x-forwarded-for"]?.split(",")[0]?.trim()
+			?? headers["x-real-ip"]
+			?? new URL(request.url).hostname
+		return { authResult, clientIp }
 	})
 	.onBeforeHandle(({ authResult, set }) => {
 		if (!authResult) {
@@ -143,7 +146,7 @@ export const openaiRoutes = new Elysia({ prefix: "/v1" })
 			})),
 		}
 	})
-	.post("/chat/completions", async ({ body, set, authResult }) => {
+	.post("/chat/completions", async ({ body, set, authResult, clientIp }) => {
 		const startTime = Date.now()
 		const req = body as ChatCompletionRequest
 
@@ -174,7 +177,7 @@ export const openaiRoutes = new Elysia({ prefix: "/v1" })
 
 		if (auth.type === "virtual_key" && auth.key) {
 			if (checkRateLimit(auth.key)) {
-				logRequest({
+				logRequest({ clientIp,
 					virtualKeyId: keyId,
 					model: req.model,
 					requestedModel: req.model,
@@ -192,7 +195,7 @@ export const openaiRoutes = new Elysia({ prefix: "/v1" })
 				}
 			}
 			if (!checkModelAccess(auth.key, req.model)) {
-				logRequest({
+				logRequest({ clientIp,
 					virtualKeyId: keyId,
 					model: req.model,
 					requestedModel: req.model,
@@ -228,7 +231,7 @@ export const openaiRoutes = new Elysia({ prefix: "/v1" })
 		if (response.status !== 200) {
 			const errorText = await response.text()
 			const mappedStatus = response.status >= 500 ? 502 : response.status
-			logRequest({
+			logRequest({ clientIp,
 				virtualKeyId: keyId,
 				model: resolvedModel,
 				requestedModel: req.model,
@@ -247,7 +250,7 @@ export const openaiRoutes = new Elysia({ prefix: "/v1" })
 				if (auth.type === "virtual_key" && auth.key) {
 					recordUsage(auth.key.id, usage.total_tokens)
 				}
-				logRequest({
+				logRequest({ clientIp,
 					virtualKeyId: keyId,
 					model: resolvedModel,
 					requestedModel: req.model,
@@ -276,7 +279,7 @@ export const openaiRoutes = new Elysia({ prefix: "/v1" })
 			recordUsage(auth.key.id, totalTokens)
 		}
 
-		logRequest({
+		logRequest({ clientIp,
 			virtualKeyId: keyId,
 			model: resolvedModel,
 			requestedModel: req.model,

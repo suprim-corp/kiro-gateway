@@ -77,8 +77,8 @@ cp .env.example .env
 
 # Dev
 bun dev           # Start cả backend + frontend
-bun dev:api       # Chỉ backend (:3001)
-bun dev:web       # Chỉ dashboard (:3000)
+bun dev:api       # Chỉ backend (:3001, internal)
+bun dev:web       # Dashboard + API proxy (:3000)
 ```
 
 ## Configuration

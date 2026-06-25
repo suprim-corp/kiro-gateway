@@ -368,11 +368,14 @@ function createResponsesStream(
 }
 
 export const responsesRoutes = new Elysia({ prefix: "/v1" })
-	.derive(async ({ headers }) => {
+	.derive(async ({ headers, request }) => {
 		const authResult = await resolveAuth(
 			headers.authorization ?? headers["x-api-key"],
 		)
-		return { authResult }
+		const clientIp = headers["x-forwarded-for"]?.split(",")[0]?.trim()
+			?? headers["x-real-ip"]
+			?? new URL(request.url).hostname
+		return { authResult, clientIp }
 	})
 	.onBeforeHandle(({ authResult, set }) => {
 		if (!authResult) {
@@ -385,7 +388,7 @@ export const responsesRoutes = new Elysia({ prefix: "/v1" })
 			}
 		}
 	})
-	.post("/responses", async ({ body, set, authResult }) => {
+	.post("/responses", async ({ body, set, authResult, clientIp }) => {
 		const startTime = Date.now()
 		const req = body as ResponsesRequest
 
@@ -464,7 +467,7 @@ export const responsesRoutes = new Elysia({ prefix: "/v1" })
 		if (response.status !== 200) {
 			const errorText = await response.text()
 			const mappedStatus = response.status >= 500 ? 502 : response.status
-			logRequest({
+			logRequest({ clientIp,
 				virtualKeyId: keyId,
 				model: resolvedModel,
 				requestedModel: req.model,
@@ -488,7 +491,7 @@ export const responsesRoutes = new Elysia({ prefix: "/v1" })
 					if (auth.type === "virtual_key" && auth.key) {
 						recordUsage(auth.key.id, usage.total_tokens)
 					}
-					logRequest({
+					logRequest({ clientIp,
 						virtualKeyId: keyId,
 						model: resolvedModel,
 						requestedModel: req.model,
@@ -516,7 +519,7 @@ export const responsesRoutes = new Elysia({ prefix: "/v1" })
 			recordUsage(auth.key.id, totalTokens)
 		}
 
-		logRequest({
+		logRequest({ clientIp,
 			virtualKeyId: keyId,
 			model: resolvedModel,
 			requestedModel: req.model,

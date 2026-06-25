@@ -70,6 +70,9 @@ function LogsContent() {
 								Key
 							</th>
 							<th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-normal">
+								IP
+							</th>
+							<th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-normal">
 								Time
 							</th>
 						</tr>
@@ -78,7 +81,7 @@ function LogsContent() {
 						{isLoading && (
 							<tr>
 								<td
-									colSpan={8}
+									colSpan={9}
 									className="px-4 py-8 text-center font-mono text-xs text-muted-foreground"
 								>
 									<div className="flex items-center justify-center gap-2">
@@ -91,7 +94,7 @@ function LogsContent() {
 						{data?.data.length === 0 && (
 							<tr>
 								<td
-									colSpan={8}
+									colSpan={9}
 									className="px-4 py-8 text-center font-mono text-xs text-muted-foreground"
 								>
 									No requests yet
@@ -131,6 +134,9 @@ function LogsContent() {
 								</td>
 								<td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
 									{log.virtualKeyName ?? "—"}
+								</td>
+								<td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
+									{log.clientIp ?? "—"}
 								</td>
 								<td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
 									{formatTimestamp(log.createdAt)}

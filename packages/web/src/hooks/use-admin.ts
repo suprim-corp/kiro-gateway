@@ -22,6 +22,7 @@ interface LogEntry {
 	totalTokens: number | null
 	latencyMs: number | null
 	streaming: boolean | null
+	clientIp: string | null
 	errorMessage: string | null
 	createdAt: number
 }

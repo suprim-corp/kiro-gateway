@@ -42,6 +42,7 @@ export const requestLogs = sqliteTable("request_logs", {
 	latencyMs: integer("latency_ms"),
 	firstTokenMs: integer("first_token_ms"),
 	streaming: integer("streaming", { mode: "boolean" }),
+	clientIp: text("client_ip"),
 	errorMessage: text("error_message"),
 	createdAt: integer("created_at").notNull(),
 })
