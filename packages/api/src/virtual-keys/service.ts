@@ -1,8 +1,8 @@
 import { eq, sql } from "drizzle-orm"
-import { db } from "../db/index"
+import { db } from "../db"
 import { virtualKeys } from "../db/schema"
 
-const KEY_PREFIX = "sk-kiro-"
+const KEY_PREFIX = "sk-"
 
 export interface CreateKeyInput {
 	name: string
