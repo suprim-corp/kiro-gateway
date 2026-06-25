@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation"
 import { type FormEvent, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { apiFetch } from "@/lib/api"
 
@@ -50,42 +51,43 @@ export default function LoginPage() {
 					</p>
 				</div>
 
-				<form
-					onSubmit={handleSubmit}
-					className="rounded-xl border border-border/60 bg-card p-6 space-y-4 backdrop-blur-sm"
-				>
-					<div className="space-y-2">
-						<label
-							htmlFor="password"
-							className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
-						>
-							Password
-						</label>
-						<Input
-							id="password"
-							type="password"
-							value={password}
-							onChange={(e) => setPassword(e.target.value)}
-							placeholder="Enter admin password"
-						/>
-					</div>
+				<Card>
+					<CardContent>
+						<form onSubmit={handleSubmit} className="space-y-4">
+							<div className="space-y-2">
+								<label
+									htmlFor="password"
+									className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground"
+								>
+									Password
+								</label>
+								<Input
+									id="password"
+									type="password"
+									value={password}
+									onChange={(e) => setPassword(e.target.value)}
+									placeholder="Enter admin password"
+								/>
+							</div>
 
-					{error && (
-						<p className="font-mono text-[10px] text-destructive">
-							{error}
-						</p>
-					)}
+							{error && (
+								<p className="font-mono text-[10px] text-destructive">
+									{error}
+								</p>
+							)}
 
-					<Button
-						type="submit"
-						variant="default"
-						size="lg"
-						disabled={loading || !password}
-						className="w-full"
-					>
-						{loading ? "Signing in..." : "Sign in"}
-					</Button>
-				</form>
+							<Button
+								type="submit"
+								variant="default"
+								size="lg"
+								disabled={loading || !password}
+								className="w-full"
+							>
+								{loading ? "Signing in..." : "Sign in"}
+							</Button>
+						</form>
+					</CardContent>
+				</Card>
 			</div>
 		</div>
 	)

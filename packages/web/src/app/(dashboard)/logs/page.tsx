@@ -2,6 +2,7 @@
 
 import { Activity } from "lucide-react"
 import { AuthGuard } from "@/components/auth-guard"
+import { Card } from "@/components/ui/card"
 import { useLogs } from "@/hooks/use-admin"
 
 function StatusBadge({ status }: { status: number }) {
@@ -43,7 +44,7 @@ function LogsContent() {
 				)}
 			</div>
 
-			<div className="rounded-xl border border-border/60 bg-card overflow-hidden backdrop-blur-sm">
+			<Card className="overflow-hidden">
 				<table className="w-full text-xs">
 					<thead>
 						<tr className="border-b border-border/40">
@@ -138,7 +139,7 @@ function LogsContent() {
 						))}
 					</tbody>
 				</table>
-			</div>
+			</Card>
 		</div>
 	)
 }

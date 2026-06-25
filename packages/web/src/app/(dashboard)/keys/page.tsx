@@ -5,6 +5,7 @@ import { Copy, Plus, Trash2 } from "lucide-react"
 import { useState } from "react"
 import { AuthGuard } from "@/components/auth-guard"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import {
 	useCreateKey,
@@ -42,10 +43,11 @@ function KeysContent() {
 			</h1>
 
 			{/* Create key form */}
-			<div className="rounded-xl border border-border/60 bg-card p-4 space-y-3 backdrop-blur-sm">
-				<span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
-					Create New Key
-				</span>
+			<Card>
+				<CardContent className="space-y-3">
+					<span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+						Create New Key
+					</span>
 				<div className="flex gap-3">
 					<Input
 						type="text"
@@ -90,10 +92,11 @@ function KeysContent() {
 						</Button>
 					</div>
 				)}
-			</div>
+				</CardContent>
+			</Card>
 
 			{/* Keys table */}
-			<div className="rounded-xl border border-border/60 bg-card overflow-hidden backdrop-blur-sm">
+			<Card className="overflow-hidden">
 				<table className="w-full text-xs">
 					<thead>
 						<tr className="border-b border-border/40">
@@ -203,7 +206,7 @@ function KeysContent() {
 						))}
 					</tbody>
 				</table>
-			</div>
+			</Card>
 		</div>
 	)
 }
