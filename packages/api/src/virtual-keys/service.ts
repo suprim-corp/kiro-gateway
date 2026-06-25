@@ -127,8 +127,10 @@ export function updateKey(
 }
 
 export function deleteKey(id: string): boolean {
-	const result = db.delete(virtualKeys).where(eq(virtualKeys.id, id)).run()
-	return result.changes > 0
+	const before = getKeyById(id)
+	if (!before) return false
+	db.delete(virtualKeys).where(eq(virtualKeys.id, id)).run()
+	return true
 }
 
 export function recordUsage(id: string, tokens: number): void {
