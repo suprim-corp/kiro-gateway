@@ -1,18 +1,8 @@
 "use client"
 
 import { Activity, Key, ScrollText, Zap } from "lucide-react"
-import useSWR from "swr"
 import { AuthGuard } from "@/components/auth-guard"
-import { apiFetch } from "@/lib/api"
-
-interface Stats {
-	totalRequests: number
-	totalTokens: number
-	activeKeys: number
-	errorRate: number
-	avgLatencyMs: number
-	uptimeSeconds: number
-}
+import { useStats } from "@/hooks/use-admin"
 
 function StatCard({
 	label,
@@ -59,11 +49,7 @@ function formatUptime(seconds: number): string {
 }
 
 function DashboardContent() {
-	const { data, isLoading, error } = useSWR<Stats>(
-		"stats",
-		() => apiFetch("/admin/stats"),
-		{ refreshInterval: 5000 },
-	)
+	const { data, isLoading, error } = useStats()
 
 	if (error) {
 		return (

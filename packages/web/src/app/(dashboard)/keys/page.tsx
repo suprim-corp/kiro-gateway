@@ -3,68 +3,34 @@
 import { formatDistanceToNow } from "date-fns"
 import { Copy, Plus, Trash2 } from "lucide-react"
 import { useState } from "react"
-import useSWR, { mutate } from "swr"
 import { AuthGuard } from "@/components/auth-guard"
-import { apiFetch } from "@/lib/api"
-
-interface VirtualKey {
-	id: string
-	name: string
-	keyPrefix: string
-	enabled: boolean
-	rateLimitPerMin: number
-	allowedModels: string[] | null
-	totalRequests: number
-	totalTokens: number
-	lastUsedAt: number | null
-	createdAt: number
-}
-
-interface KeysResponse {
-	data: VirtualKey[]
-}
+import {
+	useCreateKey,
+	useDeleteKey,
+	useKeys,
+	useToggleKey,
+} from "@/hooks/use-admin"
 
 function KeysContent() {
-	const { data, isLoading } = useSWR<KeysResponse>(
-		"keys",
-		() => apiFetch("/admin/keys"),
-		{ refreshInterval: 5000 },
-	)
-	const [creating, setCreating] = useState(false)
+	const { data, isLoading } = useKeys()
+	const createKey = useCreateKey()
+	const deleteKey = useDeleteKey()
+	const toggleKey = useToggleKey()
 	const [newKeyName, setNewKeyName] = useState("")
 	const [newKeyRateLimit, setNewKeyRateLimit] = useState(60)
 	const [createdKey, setCreatedKey] = useState<string | null>(null)
 
-	async function handleCreate() {
+	function handleCreate() {
 		if (!newKeyName.trim()) return
-		setCreating(true)
-		try {
-			const result = await apiFetch<{ key: string }>("/admin/keys", {
-				method: "POST",
-				body: JSON.stringify({
-					name: newKeyName,
-					rateLimitPerMin: newKeyRateLimit,
-				}),
-			})
-			setCreatedKey(result.key)
-			setNewKeyName("")
-			mutate("keys")
-		} finally {
-			setCreating(false)
-		}
-	}
-
-	async function handleDelete(id: string) {
-		await apiFetch(`/admin/keys/${id}`, { method: "DELETE" })
-		mutate("keys")
-	}
-
-	async function handleToggle(id: string, enabled: boolean) {
-		await apiFetch(`/admin/keys/${id}`, {
-			method: "PATCH",
-			body: JSON.stringify({ enabled: !enabled }),
-		})
-		mutate("keys")
+		createKey.mutate(
+			{ name: newKeyName, rateLimitPerMin: newKeyRateLimit },
+			{
+				onSuccess: (result) => {
+					setCreatedKey(result.key)
+					setNewKeyName("")
+				},
+			},
+		)
 	}
 
 	return (
@@ -98,7 +64,7 @@ function KeysContent() {
 					<button
 						type="button"
 						onClick={handleCreate}
-						disabled={creating || !newKeyName.trim()}
+						disabled={createKey.isPending || !newKeyName.trim()}
 						className="flex items-center gap-1.5 rounded-lg bg-neon-purple/20 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-neon-purple transition-colors hover:bg-neon-purple/30 disabled:opacity-50 cursor-pointer"
 					>
 						<Plus className="size-3" />
@@ -205,7 +171,10 @@ function KeysContent() {
 									<button
 										type="button"
 										onClick={() =>
-											handleToggle(key.id, key.enabled)
+											toggleKey.mutate({
+												id: key.id,
+												enabled: key.enabled,
+											})
 										}
 										className={`font-mono text-[10px] px-2 py-0.5 rounded-md cursor-pointer ${
 											key.enabled
@@ -219,7 +188,7 @@ function KeysContent() {
 								<td className="px-4 py-2.5">
 									<button
 										type="button"
-										onClick={() => handleDelete(key.id)}
+										onClick={() => deleteKey.mutate(key.id)}
 										className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer"
 										title="Delete key"
 									>
