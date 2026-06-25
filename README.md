@@ -124,12 +124,12 @@ Virtual keys cho phép bạn tạo nhiều API keys cho users khác nhau:
 
 ```bash
 # Tạo key qua dashboard hoặc API
-curl -X POST http://localhost:3001/admin/keys \
+curl -X POST http://localhost:3000/api/admin/keys \
   -H "Authorization: Bearer $ADMIN_API_KEY" \
   -d '{"name": "user-1", "rateLimitPerMin": 30, "allowedModels": ["claude-sonnet-4.5"]}'
 
 # Sử dụng virtual key
-curl http://localhost:3001/v1/chat/completions \
+curl http://localhost:3000/v1/chat/completions \
   -H "Authorization: Bearer sk-kiro-xxxxx" \
   -d '{"model": "claude-sonnet-4-5", "messages": [{"role": "user", "content": "Hello!"}], "stream": true}'
 ```
