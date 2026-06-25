@@ -18,12 +18,18 @@ interface KiroEventObject {
 	content?: string
 	modelId?: string
 	contextUsagePercentage?: number
+	// Top-level tool use fields (Kiro sends these directly)
+	name?: string
+	input?: string
+	stop?: boolean
+	toolUseId?: string
 }
 
 interface KiroToolEvent {
 	name?: string
 	input?: string
 	stop?: boolean
+	toolUseId?: string
 }
 
 export class AwsEventStreamParser {
@@ -83,6 +89,16 @@ export class AwsEventStreamParser {
 		if (obj.contextUsagePercentage != null && !obj.assistantResponseEvent) {
 			events.push({ type: "context_usage", data: obj.contextUsagePercentage })
 			return events
+		}
+
+		// Top-level tool use events (name/input/stop/toolUseId at root)
+		if (obj.toolUseId != null && (obj.name != null || obj.input != null || obj.stop != null)) {
+			return this.processToolEvent({
+				name: obj.name,
+				input: obj.input,
+				stop: obj.stop,
+				toolUseId: obj.toolUseId,
+			})
 		}
 
 		if (obj.assistantResponseEvent?.messageMetadataEvent) {
@@ -155,20 +171,6 @@ export class AwsEventStreamParser {
 	): RawKiroEvent[] | null {
 		if (!event) return null
 
-		if (event.name) {
-			this.currentToolCall = {
-				id: `call_${(++this.toolCallCounter).toString(16).padStart(8, "0")}`,
-				name: event.name,
-			}
-			this.toolCallArgs = event.input ?? ""
-			return null
-		}
-
-		if (event.input != null && this.currentToolCall) {
-			this.toolCallArgs += event.input
-			return null
-		}
-
 		if (event.stop && this.currentToolCall) {
 			const id = this.currentToolCall.id ?? ""
 			const name = this.currentToolCall.name ?? ""
@@ -181,6 +183,22 @@ export class AwsEventStreamParser {
 			this.currentToolCall = null
 			this.toolCallArgs = ""
 			return [{ type: "tool_use", data: toolCall }]
+		}
+
+		// Start new tool call or accumulate input
+		// Kiro sends name on every chunk, so check if we already have this tool active
+		if (event.name && !this.currentToolCall) {
+			this.currentToolCall = {
+				id: event.toolUseId ?? `call_${(++this.toolCallCounter).toString(16).padStart(8, "0")}`,
+				name: event.name,
+			}
+			this.toolCallArgs = event.input ?? ""
+			return null
+		}
+
+		if (event.input != null && this.currentToolCall) {
+			this.toolCallArgs += event.input
+			return null
 		}
 
 		return null
@@ -223,6 +241,23 @@ export class AwsEventStreamParser {
 
 	getToolCalls(): ToolUseEvent[] {
 		return this.toolCalls
+	}
+
+	flush(): RawKiroEvent[] {
+		if (this.currentToolCall) {
+			const id = this.currentToolCall.id ?? ""
+			const name = this.currentToolCall.name ?? ""
+			const toolCall: ToolUseEvent = {
+				id,
+				name,
+				arguments: this.toolCallArgs,
+			}
+			this.toolCalls.push(toolCall)
+			this.currentToolCall = null
+			this.toolCallArgs = ""
+			return [{ type: "tool_use", data: toolCall }]
+		}
+		return []
 	}
 
 	reset() {

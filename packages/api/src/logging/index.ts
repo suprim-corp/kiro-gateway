@@ -48,7 +48,7 @@ export interface LogQuery {
 	status?: number
 }
 
-interface LogRow {
+export interface LogRow {
 	id: string
 	virtualKeyId: string | null
 	accountId: string | null

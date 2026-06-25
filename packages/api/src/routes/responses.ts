@@ -3,8 +3,10 @@ import { env } from "../config"
 import {
 	buildKiroPayload,
 	type ChatCompletionRequest,
+	unprefixToolName,
 } from "../converters/openai-to-kiro"
-import { AwsEventStreamParser } from "../kiro/parser"
+import { AwsEventStreamParser, parseBracketToolCalls } from "../kiro/parser"
+import type { ToolUseEvent } from "../kiro/types"
 import { logRequest } from "../logging"
 import { collectResponse } from "../streaming/converter"
 import {
@@ -16,11 +18,30 @@ import {
 } from "../virtual-keys"
 import { getAuth, getClient, modelResolver } from "./openai"
 
-interface ResponsesInput {
+interface ResponsesInputMessage {
 	type?: "message"
 	role: "user" | "assistant" | "system" | "developer"
 	content: string | Array<{ type: string; text?: string }>
 }
+
+interface ResponsesInputFunctionCall {
+	type: "function_call"
+	id?: string
+	call_id: string
+	name: string
+	arguments: string
+}
+
+interface ResponsesInputFunctionCallOutput {
+	type: "function_call_output"
+	call_id: string
+	output: string
+}
+
+type ResponsesInput =
+	| ResponsesInputMessage
+	| ResponsesInputFunctionCall
+	| ResponsesInputFunctionCallOutput
 
 interface ResponsesRequest {
 	model: string
@@ -39,19 +60,67 @@ function inputToMessages(
 	if (typeof input === "string") {
 		return [{ role: "user", content: input }]
 	}
-	return input.map((msg) => {
-		const content =
-			typeof msg.content === "string"
-				? msg.content
-				: msg.content
-						.filter(
-							(c) => c.type === "input_text" || c.type === "text",
-						)
-						.map((c) => c.text)
-						.join("")
-		const role = msg.role === "developer" ? "system" : msg.role
-		return { role, content }
-	})
+
+	const messages: ChatCompletionRequest["messages"] = []
+	let pendingToolCalls: Array<{
+		id: string
+		type: "function"
+		function: { name: string; arguments: string }
+	}> = []
+
+	for (const item of input) {
+		if (item.type === "function_call") {
+			pendingToolCalls.push({
+				id: item.call_id,
+				type: "function",
+				function: { name: item.name, arguments: item.arguments },
+			})
+		} else if (item.type === "function_call_output") {
+			if (pendingToolCalls.length) {
+				messages.push({
+					role: "assistant",
+					content: "",
+					tool_calls: pendingToolCalls,
+				} as unknown as (typeof messages)[number])
+				pendingToolCalls = []
+			}
+			messages.push({
+				role: "tool",
+				content: item.output,
+				tool_call_id: item.call_id,
+			} as unknown as (typeof messages)[number])
+		} else {
+			if (pendingToolCalls.length) {
+				messages.push({
+					role: "assistant",
+					content: "",
+					tool_calls: pendingToolCalls,
+				} as unknown as (typeof messages)[number])
+				pendingToolCalls = []
+			}
+			const content =
+				typeof item.content === "string"
+					? item.content
+					: item.content
+							.filter(
+								(c) => c.type === "input_text" || c.type === "text",
+							)
+							.map((c) => c.text)
+							.join("")
+			const role = item.role === "developer" ? "system" : item.role
+			messages.push({ role, content })
+		}
+	}
+
+	if (pendingToolCalls.length) {
+		messages.push({
+			role: "assistant",
+			content: "",
+			tool_calls: pendingToolCalls,
+		} as unknown as (typeof messages)[number])
+	}
+
+	return messages
 }
 
 function createResponsesStream(
@@ -61,14 +130,105 @@ function createResponsesStream(
 ): ReadableStream<string> {
 	const parser = new AwsEventStreamParser()
 	let fullText = ""
+	const toolCalls: ToolUseEvent[] = []
+	let outputIndex = 0
+	let textClosed = false
 
 	function sse(event: { type: string; [k: string]: unknown }): string {
 		return `data: ${JSON.stringify(event)}\n\n`
 	}
 
+	function closeTextPart(controller: ReadableStreamDefaultController<string>) {
+		if (textClosed) return
+		textClosed = true
+		controller.enqueue(
+			sse({
+				type: "response.output_text.done",
+				output_index: 0,
+				content_index: 0,
+				text: fullText,
+			}),
+		)
+		controller.enqueue(
+			sse({
+				type: "response.content_part.done",
+				output_index: 0,
+				content_index: 0,
+				part: { type: "output_text", text: fullText },
+			}),
+		)
+		controller.enqueue(
+			sse({
+				type: "response.output_item.done",
+				output_index: 0,
+				item: {
+					type: "message",
+					id: `msg_${responseId.slice(5)}`,
+					role: "assistant",
+					content: [{ type: "output_text", text: fullText }],
+				},
+			}),
+		)
+		outputIndex = 1
+	}
+
+	function emitToolCall(
+		controller: ReadableStreamDefaultController<string>,
+		tc: ToolUseEvent,
+	) {
+		closeTextPart(controller)
+		const name = unprefixToolName(tc.name)
+		const itemId = `fc_${tc.id}`
+		controller.enqueue(
+			sse({
+				type: "response.output_item.added",
+				output_index: outputIndex,
+				item: {
+					type: "function_call",
+					id: itemId,
+					name,
+					arguments: "",
+					call_id: tc.id,
+				},
+			}),
+		)
+		controller.enqueue(
+			sse({
+				type: "response.function_call_arguments.delta",
+				item_id: itemId,
+				call_id: tc.id,
+				output_index: outputIndex,
+				delta: tc.arguments,
+			}),
+		)
+		controller.enqueue(
+			sse({
+				type: "response.function_call_arguments.done",
+				item_id: itemId,
+				call_id: tc.id,
+				output_index: outputIndex,
+				arguments: tc.arguments,
+			}),
+		)
+		controller.enqueue(
+			sse({
+				type: "response.output_item.done",
+				output_index: outputIndex,
+				item: {
+					type: "function_call",
+					id: itemId,
+					name,
+					arguments: tc.arguments,
+					call_id: tc.id,
+				},
+			}),
+		)
+		toolCalls.push(tc)
+		outputIndex++
+	}
+
 	return new ReadableStream<string>({
 		async start(controller) {
-			// Emit initial Responses API events
 			controller.enqueue(
 				sse({
 					type: "response.created",
@@ -102,7 +262,6 @@ function createResponsesStream(
 				}),
 			)
 
-			// Read Kiro binary stream directly
 			const reader = kiroResponse.body?.getReader()
 			if (!reader) {
 				controller.close()
@@ -127,42 +286,54 @@ function createResponsesStream(
 									delta: text,
 								}),
 							)
+						} else if (event.type === "tool_use") {
+							emitToolCall(controller, event.data as ToolUseEvent)
 						}
 					}
 				}
-			} catch (err) {
-				// Stream error — still close gracefully
+			} catch {
+				// Stream error — close gracefully
 			}
 
-			// Emit completion events
-			controller.enqueue(
-				sse({
-					type: "response.output_text.done",
-					output_index: 0,
-					content_index: 0,
-					text: fullText,
-				}),
-			)
-			controller.enqueue(
-				sse({
-					type: "response.content_part.done",
-					output_index: 0,
-					content_index: 0,
-					part: { type: "output_text", text: fullText },
-				}),
-			)
-			controller.enqueue(
-				sse({
-					type: "response.output_item.done",
-					output_index: 0,
-					item: {
-						type: "message",
-						id: `msg_${responseId.slice(5)}`,
-						role: "assistant",
-						content: [{ type: "output_text", text: fullText }],
-					},
-				}),
-			)
+			// Flush any in-progress tool call that never got stop:true
+			const flushed = parser.flush()
+			for (const event of flushed) {
+				if (event.type === "tool_use") {
+					emitToolCall(controller, event.data as ToolUseEvent)
+				}
+			}
+
+			// Check for bracket-style tool calls in content
+			const bracketTools = parseBracketToolCalls(fullText)
+			if (bracketTools.length) {
+				const seen = new Set(toolCalls.map((t) => t.id))
+				for (const bt of bracketTools) {
+					if (!seen.has(bt.id)) {
+						emitToolCall(controller, bt)
+					}
+				}
+			}
+
+			closeTextPart(controller)
+
+			// Build final output array
+			const output: unknown[] = [
+				{
+					type: "message",
+					role: "assistant",
+					content: [{ type: "output_text", text: fullText }],
+				},
+			]
+			for (const tc of toolCalls) {
+				output.push({
+					type: "function_call",
+					id: `fc_${tc.id}`,
+					name: unprefixToolName(tc.name),
+					arguments: tc.arguments,
+					call_id: tc.id,
+				})
+			}
+
 			controller.enqueue(
 				sse({
 					type: "response.completed",
@@ -171,15 +342,7 @@ function createResponsesStream(
 						object: "response",
 						status: "completed",
 						model,
-						output: [
-							{
-								type: "message",
-								role: "assistant",
-								content: [
-									{ type: "output_text", text: fullText },
-								],
-							},
-						],
+						output,
 						usage: {
 							input_tokens: 0,
 							output_tokens: 0,

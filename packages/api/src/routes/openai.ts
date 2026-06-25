@@ -6,6 +6,7 @@ import { env } from "../config"
 import {
 	buildKiroPayload,
 	type ChatCompletionRequest,
+	unprefixToolName,
 } from "../converters/openai-to-kiro"
 import { KiroHttpClient } from "../kiro"
 import { logRequest } from "../logging"
@@ -95,7 +96,7 @@ interface ChatCompletionChoice {
 	finish_reason: "stop" | "tool_calls"
 }
 
-interface ChatCompletionResponse {
+export interface ChatCompletionResponse {
 	id: string
 	object: "chat.completion"
 	created: number
@@ -287,7 +288,7 @@ export const openaiRoutes = new Elysia({ prefix: "/v1" })
 						id: tc.id,
 						type: "function" as const,
 						function: {
-							name: tc.name,
+							name: unprefixToolName(tc.name),
 							arguments: tc.arguments,
 						},
 					})),

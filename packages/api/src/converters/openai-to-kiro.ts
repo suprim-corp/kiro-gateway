@@ -124,6 +124,16 @@ export function buildKiroPayload(
 		origin: "AI_EDITOR",
 	}
 
+	// Carry over toolResults from the last (current) message
+	const lastEntry = messages[messages.length - 1]
+	if (lastEntry?.userInputMessage?.userInputMessageContext?.toolResults) {
+		if (!userInputMessage.userInputMessageContext) {
+			userInputMessage.userInputMessageContext = {}
+		}
+		userInputMessage.userInputMessageContext.toolResults =
+			lastEntry.userInputMessage.userInputMessageContext.toolResults
+	}
+
 	// Tools go in userInputMessageContext
 	if (req.tools?.length) {
 		const tools = convertTools(req.tools)
@@ -261,13 +271,21 @@ function convertMessages(messages: OpenAIMessage[]): {
 	return { system, messages: converted }
 }
 
+export function prefixToolName(name: string): string {
+	return name
+}
+
+export function unprefixToolName(name: string): string {
+	return name
+}
+
 function convertTools(tools: OpenAITool[]): KiroToolSpec[] {
 	return tools
 		.map((tool): KiroToolSpec | null => {
 			if (tool.type === "function" && tool.function) {
 				return {
 					toolSpecification: {
-						name: tool.function.name,
+						name: prefixToolName(tool.function.name),
 						description: tool.function.description || `Tool: ${tool.function.name}`,
 						inputSchema: {
 							json: sanitizeJsonSchema(
@@ -283,11 +301,11 @@ function convertTools(tools: OpenAITool[]): KiroToolSpec[] {
 			if (tool.name) {
 				return {
 					toolSpecification: {
-						name: tool.name,
+						name: prefixToolName(tool.name),
 						description: tool.description || `Tool: ${tool.name}`,
 						inputSchema: {
 							json: sanitizeJsonSchema(
-								tool.input_schema ?? {
+								tool.input_schema ?? (tool as any).parameters ?? {
 									type: "object",
 									properties: {},
 								},

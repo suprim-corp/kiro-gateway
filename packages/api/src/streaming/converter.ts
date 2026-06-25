@@ -1,4 +1,5 @@
 import { AwsEventStreamParser, parseBracketToolCalls } from "../kiro/parser"
+import { unprefixToolName } from "../converters/openai-to-kiro"
 import type { ToolUseEvent } from "../kiro/types"
 import { generateCompletionId } from "../utils/ids"
 
@@ -142,7 +143,7 @@ export function createOpenAIStream(
 											id: tc.id,
 											type: "function",
 											function: {
-												name: tc.name,
+												name: unprefixToolName(tc.name),
 												arguments: tc.arguments,
 											},
 										},
@@ -225,9 +226,9 @@ export async function collectResponse(
 
 		const events = parser.feed(value)
 		for (const event of events) {
-			if (event.type === "content") fullContent += event.data
-			else if (event.type === "tool_use") toolCalls.push(event.data)
-			else if (event.type === "context_usage") contextUsage = event.data
+			if (event.type === "content") fullContent += event.data as string
+			else if (event.type === "tool_use") toolCalls.push(event.data as ToolUseEvent)
+			else if (event.type === "context_usage") contextUsage = event.data as number
 		}
 	}
 
