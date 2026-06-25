@@ -53,6 +53,17 @@ const envSchema = z.object({
 	FIRST_TOKEN_TIMEOUT: z.coerce.number().default(15),
 	STREAMING_READ_TIMEOUT: z.coerce.number().default(300),
 	FIRST_TOKEN_MAX_RETRIES: z.coerce.number().default(3),
+
+	// Model access
+	DISABLED_MODELS: z
+		.string()
+		.default("")
+		.transform((v) =>
+			v
+				.split(",")
+				.map((s) => s.trim())
+				.filter(Boolean),
+		),
 })
 
 export type Env = z.infer<typeof envSchema>

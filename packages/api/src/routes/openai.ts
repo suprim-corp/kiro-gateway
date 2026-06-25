@@ -73,7 +73,9 @@ export const openaiRoutes = new Elysia({ prefix: "/v1" })
 	.get("/models", () => {
 		const models = modelResolver.getAvailableModels()
 		const fallbackIds = FALLBACK_MODELS.map((m) => m.modelId)
-		const allModels = [...new Set([...models, ...fallbackIds])]
+		const allModels = [...new Set([...models, ...fallbackIds])].filter(
+			(id) => !env.DISABLED_MODELS.includes(id),
+		)
 
 		return {
 			object: "list",
@@ -95,6 +97,17 @@ export const openaiRoutes = new Elysia({ prefix: "/v1" })
 				error: {
 					message: "model and messages are required",
 					type: "invalid_request_error",
+				},
+			}
+		}
+
+		const resolved = modelResolver.resolve(req.model)
+		if (env.DISABLED_MODELS.includes(resolved.internalId)) {
+			set.status = 403
+			return {
+				error: {
+					message: `Model '${req.model}' is disabled`,
+					type: "model_error",
 				},
 			}
 		}
