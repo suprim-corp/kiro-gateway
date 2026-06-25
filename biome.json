@@ -4,6 +4,12 @@
 		"indentStyle": "tab",
 		"indentWidth": 4
 	},
+	"css": {
+		"parser": {
+			"cssModules": true,
+			"tailwindDirectives": true
+		}
+	},
 	"javascript": {
 		"formatter": {
 			"semicolons": "asNeeded",
