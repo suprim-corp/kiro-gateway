@@ -1,12 +1,12 @@
 import { existsSync, readFileSync } from "node:fs"
-import { resolve } from "node:path"
+import { dirname, resolve } from "node:path"
 import { env } from "../config"
 import { refreshDesktopToken, refreshSsoOidcToken } from "./refresh"
 import type { AccountCredentialConfig, KiroCredentials } from "./types"
 import { AuthType } from "./types"
 
 const TOKEN_REFRESH_THRESHOLD = 600 // 10 min before expiry
-const REFRESH_COOLDOWN_MS = 300_000 // don't retry refresh for 5min after failure
+const REFRESH_COOLDOWN_MS = 60_000 // don't retry refresh for 5min after failure
 
 export class KiroAuthManager {
 	private accessToken: string | null = null
@@ -59,10 +59,10 @@ export class KiroAuthManager {
 		if (!existsSync(resolved)) {
 			throw new Error(`Credentials file not found: ${resolved}`)
 		}
-		
+
 		const raw = readFileSync(resolved, "utf-8")
 		const creds: KiroCredentials = JSON.parse(raw)
-		
+
 		this.accessToken = creds.accessToken ?? null
 		this.refreshToken = creds.refreshToken ?? null
 		this.expiresAt = creds.expiresAt ? new Date(creds.expiresAt) : null
@@ -72,6 +72,10 @@ export class KiroAuthManager {
 		}
 		this.clientId = creds.clientId ?? null
 		this.clientSecret = creds.clientSecret ?? null
+
+		if (!this.clientId && creds.clientIdHash) {
+			this.loadEnterpriseDeviceRegistration(creds.clientIdHash)
+		}
 	}
 	
 	private loadFromSqlite(dbPath: string) {
@@ -158,7 +162,23 @@ export class KiroAuthManager {
 		}
 		this.detectAuthType()
 	}
-	
+
+	private loadEnterpriseDeviceRegistration(clientIdHash: string) {
+		const candidates = [
+			resolve(process.env.HOME ?? "~", ".aws/sso/cache", `${clientIdHash}.json`),
+			resolve(this.credentialSource?.path ? dirname(this.credentialSource.path) : ".", `${clientIdHash}.json`),
+		]
+		for (const regPath of candidates) {
+			if (!existsSync(regPath)) continue
+			try {
+				const data = JSON.parse(readFileSync(regPath, "utf-8"))
+				if (data.clientId) this.clientId = data.clientId
+				if (data.clientSecret) this.clientSecret = data.clientSecret
+				return
+			} catch {}
+		}
+	}
+
 	private detectAuthType() {
 		if (this.clientId && this.clientSecret) {
 			this.authType = AuthType.AWS_SSO_OIDC
