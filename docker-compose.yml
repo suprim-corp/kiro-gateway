@@ -1,5 +1,6 @@
 services:
   gateway:
+    container_name: kiro-gateway
     build: .
     ports:
       - "${WEB_PORT:-3000}:3000"
