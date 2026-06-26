@@ -129,12 +129,20 @@ export const anthropicRoutes = new Elysia({ prefix: "/v1" })
 
 		logger.debug(`[Anthropic] messages=${openaiMessages.length}, tools=${req.tools?.length ?? 0}`)
 
-		const response = await client.request({
-			method: "POST",
-			url,
-			body: payload,
-			stream: req.stream ?? false,
-		})
+		let response: Response
+		try {
+			response = await client.request({
+				method: "POST",
+				url,
+				body: payload,
+				stream: req.stream ?? false,
+			})
+		} catch (e) {
+			logger.error(`[Anthropic] Request failed: ${e instanceof Error ? e.message : e}`)
+			logRequest({ clientIp, virtualKeyId: keyId, model: resolved.internalId, requestedModel: req.model, status: 503, streaming: req.stream, latencyMs: Date.now() - startTime, errorMessage: e instanceof Error ? e.message : "Unknown error" })
+			set.status = 503
+			return { type: "error", error: { type: "api_error", message: "Service temporarily unavailable" } }
+		}
 
 		const resolvedModel = resolved.internalId
 		const responseId = `msg_${crypto.randomUUID().replace(/-/g, "").slice(0, 24)}`
@@ -153,7 +161,10 @@ export const anthropicRoutes = new Elysia({ prefix: "/v1" })
 				errorMessage: errorText.slice(0, 500),
 			})
 			set.status = mappedStatus
-			return { type: "error", error: { type: "api_error", message: errorText } }
+			const clientMessage = mappedStatus === 429
+				? "Service is temporarily overloaded, please retry"
+				: "An internal error occurred"
+			return { type: "error", error: { type: "api_error", message: clientMessage } }
 		}
 
 		if (req.stream) {

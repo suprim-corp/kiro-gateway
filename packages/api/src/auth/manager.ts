@@ -6,7 +6,7 @@ import type { AccountCredentialConfig, KiroCredentials } from "./types"
 import { AuthType } from "./types"
 
 const TOKEN_REFRESH_THRESHOLD = 600 // 10 min before expiry
-const REFRESH_COOLDOWN_MS = 60_000 // don't retry refresh for 60s after failure
+const REFRESH_COOLDOWN_MS = 300_000 // don't retry refresh for 5min after failure
 
 export class KiroAuthManager {
 	private accessToken: string | null = null
@@ -205,13 +205,9 @@ export class KiroAuthManager {
 		} catch (e) {
 			this.lastRefreshFailure = Date.now()
 			if (this.accessToken && !this.isActuallyExpired()) {
-				console.warn(
-					"[Auth] Refresh failed, using existing token until expiry:",
-					e instanceof Error ? e.message : e,
-				)
 				return this.accessToken
 			}
-			throw e
+			throw new Error("Service temporarily unavailable")
 		}
 
 		if (!this.accessToken) {

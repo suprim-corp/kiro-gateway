@@ -118,16 +118,23 @@ export async function handleChatCompletion(
 	const client = getClient()
 	const payload = buildKiroPayload(req, kiroAuth)
 	const url = `${kiroAuth.apiHost}/generateAssistantResponse`
-	
-	const response = await client.request({
-		method: "POST",
-		url,
-		body: payload,
-		stream: req.stream ?? false,
-	})
-	
+
+	let response: Response
+	try {
+		response = await client.request({
+			method: "POST",
+			url,
+			body: payload,
+			stream: req.stream ?? false,
+		})
+	} catch (e) {
+		logRequest({ clientIp, virtualKeyId: keyId, model: resolved.internalId, requestedModel: req.model, status: 503, streaming: req.stream, latencyMs: Date.now() - startTime, errorMessage: e instanceof Error ? e.message : "Unknown error" })
+		set.status = 503
+		return { error: { message: "Service temporarily unavailable", type: "api_error" } }
+	}
+
 	const resolvedModel = resolved.internalId
-	
+
 	if (response.status !== 200) {
 		const errorText = await response.text()
 		const mappedStatus = response.status >= 500 ? 502 : response.status
@@ -142,7 +149,10 @@ export async function handleChatCompletion(
 			errorMessage: errorText.slice(0, 500),
 		})
 		set.status = mappedStatus
-		return { error: { message: errorText, type: "upstream_error" } }
+		const clientMessage = mappedStatus === 429
+			? "Service is temporarily overloaded, please retry"
+			: "An internal error occurred"
+		return { error: { message: clientMessage, type: "api_error" } }
 	}
 	
 	if (req.stream) {
