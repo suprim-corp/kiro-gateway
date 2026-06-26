@@ -119,7 +119,7 @@ function LogsContent() {
 									{log.completionTokens?.toLocaleString() ?? "—"}
 								</td>
 								<td className="px-4 py-2.5 font-mono text-[10px] text-muted-foreground">
-									{log.latencyMs ? `${log.latencyMs}ms` : "—"}
+									{log.latencyMs ? `${log.latencyMs.toLocaleString()}ms` : "—"}
 								</td>
 								<td className="px-4 py-2.5 font-mono text-[10px]">
 									<span
