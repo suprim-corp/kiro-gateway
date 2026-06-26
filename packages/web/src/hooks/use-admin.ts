@@ -54,6 +54,7 @@ interface VirtualKey {
 
 interface KeysResponse {
 	data: VirtualKey[]
+	total: number
 }
 
 export function useStats() {
@@ -64,18 +65,20 @@ export function useStats() {
 	})
 }
 
-export function useLogs() {
+export function useLogs(page = 1, limit = 50) {
+	const offset = (page - 1) * limit
 	return useQuery<LogsResponse>({
-		queryKey: ["logs"],
-		queryFn: () => apiFetch("/admin/logs?limit=100"),
+		queryKey: ["logs", page, limit],
+		queryFn: () => apiFetch(`/admin/logs?limit=${limit}&offset=${offset}`),
 		refetchInterval: 3000,
 	})
 }
 
-export function useKeys() {
+export function useKeys(page = 1, limit = 20) {
+	const offset = (page - 1) * limit
 	return useQuery<KeysResponse>({
-		queryKey: ["keys"],
-		queryFn: () => apiFetch("/admin/keys"),
+		queryKey: ["keys", page, limit],
+		queryFn: () => apiFetch(`/admin/keys?limit=${limit}&offset=${offset}`),
 		refetchInterval: 5000,
 	})
 }

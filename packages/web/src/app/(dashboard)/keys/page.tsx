@@ -22,6 +22,15 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import {
+	Pagination,
+	PaginationContent,
+	PaginationEllipsis,
+	PaginationItem,
+	PaginationLink,
+	PaginationNext,
+	PaginationPrevious,
+} from "@/components/ui/pagination"
+import {
 	Tooltip,
 	TooltipContent,
 	TooltipProvider,
@@ -157,8 +166,11 @@ function BudgetDialog({ keyId, keyName, currentPeriod, currentTokens, currentReq
 	)
 }
 
+const KEYS_PAGE_SIZE = 20
+
 function KeysContent() {
-	const { data, isLoading } = useKeys()
+	const [page, setPage] = useState(1)
+	const { data, isLoading } = useKeys(page, KEYS_PAGE_SIZE)
 	const createKey = useCreateKey()
 	const toggleKey = useToggleKey()
 	const revokeKey = useRevokeKey()
@@ -166,6 +178,7 @@ function KeysContent() {
 	const [newKeyRateLimit, setNewKeyRateLimit] = useState(60)
 	const [createdKey, setCreatedKey] = useState<string | null>(null)
 	const [editingBudget, setEditingBudget] = useState<string | null>(null)
+	const totalPages = data ? Math.ceil(data.total / KEYS_PAGE_SIZE) : 0
 
 	const editingKey = data?.data.find((k) => k.id === editingBudget)
 
@@ -407,6 +420,33 @@ function KeysContent() {
 					open={!!editingBudget}
 					onClose={() => setEditingBudget(null)}
 				/>
+			)}
+
+			{totalPages > 1 && (
+				<Pagination>
+					<PaginationContent>
+						<PaginationItem>
+							<PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); setPage((p) => Math.max(1, p - 1)) }} className="cursor-pointer" />
+						</PaginationItem>
+						{Array.from({ length: totalPages }, (_, i) => i + 1)
+							.filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+							.map((p, idx, arr) => (
+								<span key={p} className="flex items-center">
+									{idx > 0 && arr[idx - 1] !== p - 1 && (
+										<PaginationItem><PaginationEllipsis /></PaginationItem>
+									)}
+									<PaginationItem>
+										<PaginationLink href="#" isActive={p === page} onClick={(e) => { e.preventDefault(); setPage(p) }} className="cursor-pointer">
+											{p}
+										</PaginationLink>
+									</PaginationItem>
+								</span>
+							))}
+						<PaginationItem>
+							<PaginationNext href="#" onClick={(e) => { e.preventDefault(); setPage((p) => Math.min(totalPages, p + 1)) }} className="cursor-pointer" />
+						</PaginationItem>
+					</PaginationContent>
+				</Pagination>
 			)}
 		</div>
 		</TooltipProvider>

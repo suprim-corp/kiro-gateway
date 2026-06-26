@@ -103,8 +103,12 @@ export async function createKey(
 	return { key: row, rawKey }
 }
 
-export function listKeys(): VirtualKeyRow[] {
-	return db.select().from(virtualKeys).all() as VirtualKeyRow[]
+export function listKeys(opts?: { limit?: number; offset?: number }): { data: VirtualKeyRow[]; total: number } {
+	const limit = opts?.limit ?? 20
+	const offset = opts?.offset ?? 0
+	const total = (db.select({ count: sql<number>`count(*)` }).from(virtualKeys).get() as { count: number })?.count ?? 0
+	const data = db.select().from(virtualKeys).limit(limit).offset(offset).all() as VirtualKeyRow[]
+	return { data, total }
 }
 
 export function getKeyById(id: string): VirtualKeyRow | undefined {

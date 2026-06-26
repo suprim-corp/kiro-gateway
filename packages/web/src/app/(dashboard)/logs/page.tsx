@@ -1,9 +1,21 @@
 "use client"
 
-import { Activity } from "lucide-react"
+import { useState } from "react"
+import { Spinner } from "@phosphor-icons/react"
 import { AuthGuard } from "@/components/auth-guard"
 import { Card } from "@/components/ui/card"
+import {
+	Pagination,
+	PaginationContent,
+	PaginationEllipsis,
+	PaginationItem,
+	PaginationLink,
+	PaginationNext,
+	PaginationPrevious,
+} from "@/components/ui/pagination"
 import { useLogs } from "@/hooks/use-admin"
+
+const PAGE_SIZE = 50
 
 function StatusBadge({ status }: { status: number }) {
 	const color =
@@ -29,7 +41,9 @@ function formatTimestamp(ts: number): string {
 }
 
 function LogsContent() {
-	const { data, isLoading } = useLogs()
+	const [page, setPage] = useState(1)
+	const { data, isLoading } = useLogs(page, PAGE_SIZE)
+	const totalPages = data ? Math.ceil(data.total / PAGE_SIZE) : 0
 
 	return (
 		<div className="space-y-6">
@@ -45,8 +59,9 @@ function LogsContent() {
 			</div>
 
 			<Card className="overflow-hidden">
-				<table className="w-full text-xs">
-					<thead>
+				<div className="max-h-[calc(100vh-220px)] overflow-auto">
+					<table className="w-full text-xs">
+						<thead className="sticky top-0 bg-card z-10">
 						<tr className="border-b border-border/40">
 							<th className="px-4 py-3 text-left font-mono text-[10px] uppercase tracking-widest text-muted-foreground font-normal">
 								Status
@@ -88,7 +103,7 @@ function LogsContent() {
 									className="px-4 py-8 text-center font-mono text-xs text-muted-foreground"
 								>
 									<div className="flex items-center justify-center gap-2">
-										<Activity className="size-3 animate-pulse" />
+										<Spinner className="size-3 animate-spin" />
 										Loading...
 									</div>
 								</td>
@@ -151,7 +166,35 @@ function LogsContent() {
 						))}
 					</tbody>
 				</table>
+				</div>
 			</Card>
+
+			{totalPages > 1 && (
+				<Pagination>
+					<PaginationContent>
+						<PaginationItem>
+							<PaginationPrevious href="#" onClick={(e) => { e.preventDefault(); setPage((p) => Math.max(1, p - 1)) }} className="cursor-pointer" />
+						</PaginationItem>
+						{Array.from({ length: totalPages }, (_, i) => i + 1)
+							.filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+							.map((p, idx, arr) => (
+								<span key={p} className="flex items-center">
+									{idx > 0 && arr[idx - 1] !== p - 1 && (
+										<PaginationItem><PaginationEllipsis /></PaginationItem>
+									)}
+									<PaginationItem>
+										<PaginationLink href="#" isActive={p === page} onClick={(e) => { e.preventDefault(); setPage(p) }} className="cursor-pointer">
+											{p}
+										</PaginationLink>
+									</PaginationItem>
+								</span>
+							))}
+						<PaginationItem>
+							<PaginationNext href="#" onClick={(e) => { e.preventDefault(); setPage((p) => Math.min(totalPages, p + 1)) }} className="cursor-pointer" />
+						</PaginationItem>
+					</PaginationContent>
+				</Pagination>
+			)}
 		</div>
 	)
 }

@@ -60,8 +60,10 @@ const protectedRoutes = new Elysia({ prefix: "/admin" })
 			status: query.status ? Number(query.status) : undefined,
 		})
 	})
-	.get("/keys", () => {
-		const keys = listKeys()
+	.get("/keys", ({ query }) => {
+		const limit = query.limit ? Number(query.limit) : 20
+		const offset = query.offset ? Number(query.offset) : 0
+		const { data: keys, total } = listKeys({ limit, offset })
 		const now = Date.now()
 		return {
 			data: keys.map((k) => ({
@@ -89,6 +91,7 @@ const protectedRoutes = new Elysia({ prefix: "/admin" })
 				lastUsedAt: k.lastUsedAt,
 				createdAt: k.createdAt,
 			})),
+			total,
 		}
 	})
 	.post("/keys", async ({ body, set }) => {
