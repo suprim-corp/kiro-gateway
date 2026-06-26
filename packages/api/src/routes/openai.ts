@@ -111,13 +111,13 @@ export interface ChatCompletionResponse {
 }
 
 export const openaiRoutes = new Elysia({ prefix: "/v1" })
-	.derive(async ({ headers, request }) => {
+	.derive(async ({ headers, request, server }) => {
 		const authResult = await resolveAuth(
 			headers.authorization ?? headers["x-api-key"],
 		)
 		const clientIp = headers["x-forwarded-for"]?.split(",")[0]?.trim()
 			?? headers["x-real-ip"]
-			?? new URL(request.url).hostname
+			?? server?.requestIP(request)?.address
 		return { authResult, clientIp }
 	})
 	.onBeforeHandle(({ authResult, set }) => {
