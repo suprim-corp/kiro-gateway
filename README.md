@@ -154,6 +154,33 @@ Mỗi virtual key có:
 
 Model names tự động normalize — `claude-sonnet-4-5`, `claude-sonnet-4.5`, `claude-sonnet-4-5-20250929` đều hoạt động.
 
+## Docker
+
+```bash
+# Build & run
+docker compose up -d
+
+# Rebuild
+docker compose up -d --build
+
+# Logs
+docker compose logs -f
+```
+
+Image: ~57MB (Alpine + UPX-compressed Bun). Chỉ expose port 3000 (Next.js), API chạy internal trên 3001.
+
+SQLite data persist qua volume `./data`. Cần set `DATABASE_PATH` trong `.env`:
+
+```env
+DATABASE_PATH=/app/data/gateway.db
+```
+
+Port expose configurable qua `WEB_PORT` (default 3000):
+
+```env
+WEB_PORT=8080
+```
+
 ## Development
 
 ```bash

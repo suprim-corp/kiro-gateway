@@ -1,0 +1,11 @@
+services:
+  gateway:
+    build: .
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    env_file: .env
+    environment:
+      DATABASE_PATH: /app/data/gateway.db
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

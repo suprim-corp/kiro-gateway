@@ -26,8 +26,14 @@ if (existsSync(rootEnv)) {
 	}
 }
 
+// Strip quotes from env vars (docker env_file doesn't strip them)
+for (const [key, val] of Object.entries(process.env)) {
+	if (val && ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'")))) {
+		process.env[key] = val.slice(1, -1)
+	}
+}
+
 const envSchema = z.object({
-	PORT: z.coerce.number().default(3001),
 
 	// Kiro credentials
 	KIRO_CREDS_FILE: z.string().optional(),

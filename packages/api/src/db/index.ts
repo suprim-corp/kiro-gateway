@@ -4,7 +4,7 @@ import { dirname, resolve } from "node:path"
 import { drizzle } from "drizzle-orm/bun-sqlite"
 import * as schema from "./schema"
 
-const DB_PATH = resolve(import.meta.dir, "../../data/gateway.db")
+const DB_PATH = process.env.DATABASE_PATH ?? resolve(import.meta.dir, "../../data/gateway.db")
 
 mkdirSync(dirname(DB_PATH), { recursive: true })
 

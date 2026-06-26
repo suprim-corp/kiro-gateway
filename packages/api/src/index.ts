@@ -24,9 +24,9 @@ const app = new Elysia()
 	.use(responsesRoutes)
 	.use(anthropicRoutes)
 	.use(adminRoutes)
-	.listen(env.PORT)
+	.listen(3001)
 
-logger.info(`Kiro Gateway | API :${env.PORT} | Dashboard :3000 | pid:${process.pid}`)
+logger.info(`Kiro Gateway | API :3001 | Dashboard :3000 | pid:${process.pid}`)
 refreshModelCache().then(() => {})
 setInterval(refreshModelCache, MODEL_CACHE_TTL)
 
