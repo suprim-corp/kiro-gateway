@@ -222,12 +222,12 @@ function UsageContent() {
 							<p className="font-mono text-xs text-muted-foreground text-center py-8">No data yet</p>
 						) : (
 							<ResponsiveContainer width="100%" height={180}>
-								<BarChart data={keys.filter(k => k.usage[periodKey] > 0)} layout="vertical">
+								<BarChart data={keys.filter(k => k.usage[periodKey] > 0).map(k => ({ name: k.name, cost: k.usage[periodKey] }))} layout="vertical">
 									<CartesianGrid strokeDasharray="3 3" stroke="#333" strokeOpacity={0.5} horizontal={false} />
 									<XAxis type="number" tick={{ fontSize: 10, fill: "#888" }} tickFormatter={(v: number) => `$${v.toFixed(2)}`} />
 									<YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: "#888" }} width={80} />
 									<Tooltip contentStyle={{ backgroundColor: "#1a1a1a", border: "1px solid #333", borderRadius: 8, fontSize: 11 }} formatter={(value) => `$${Number(value).toFixed(4)}`} />
-									<Bar dataKey={`usage.${periodKey}`} fill="#facc15" radius={[0, 4, 4, 0]} opacity={0.8} />
+									<Bar dataKey="cost" name="Cost" fill="#facc15" radius={[0, 4, 4, 0]} opacity={0.8} />
 								</BarChart>
 							</ResponsiveContainer>
 						)}
