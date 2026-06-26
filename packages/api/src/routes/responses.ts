@@ -3,6 +3,7 @@ import { env } from "../config"
 import {
 	buildKiroPayload,
 	type ChatCompletionRequest,
+	type OpenAIMessage,
 	unprefixToolName,
 } from "../converters/openai-to-kiro"
 import { AwsEventStreamParser, parseBracketToolCalls } from "../kiro/parser"
@@ -23,7 +24,7 @@ import { getAuth, getClient, modelResolver } from "./openai"
 interface ResponsesInputMessage {
 	type?: "message"
 	role: "user" | "assistant" | "system" | "developer"
-	content: string | Array<{ type: string; text?: string }>
+	content: string | Array<{ type: string; text?: string; image_url?: string; detail?: string }>
 }
 
 interface ResponsesInputFunctionCall {
@@ -54,6 +55,29 @@ interface ResponsesRequest {
 	tools?: unknown[]
 	tool_choice?: string
 	reasoning?: { effort?: string }
+}
+
+function convertResponsesContent(
+	blocks: Array<{ type: string; text?: string; image_url?: string; detail?: string }>,
+): OpenAIMessage["content"] {
+	const hasImage = blocks.some((b) => b.type === "input_image" && b.image_url)
+	if (!hasImage) {
+		return blocks
+			.filter((c) => c.type === "input_text" || c.type === "text")
+			.map((c) => c.text ?? "")
+			.join("")
+	}
+	return blocks
+		.map((b) => {
+			if ((b.type === "input_text" || b.type === "text") && b.text) {
+				return { type: "text" as const, text: b.text }
+			}
+			if (b.type === "input_image" && b.image_url) {
+				return { type: "image_url" as const, image_url: { url: b.image_url } }
+			}
+			return null
+		})
+		.filter((b): b is NonNullable<typeof b> => b !== null)
 }
 
 function inputToMessages(
@@ -106,12 +130,7 @@ function inputToMessages(
 			const content =
 				typeof item.content === "string"
 					? item.content
-					: item.content
-							.filter(
-								(c) => c.type === "input_text" || c.type === "text",
-							)
-							.map((c) => c.text)
-							.join("")
+					: convertResponsesContent(item.content)
 			const role = item.role === "developer" ? "system" : item.role
 
 			// If assistant message, hold it — next items might be function_calls belonging to this turn
@@ -120,7 +139,7 @@ function inputToMessages(
 				if (pendingAssistantContent) {
 					messages.push({ role: "assistant", content: pendingAssistantContent })
 				}
-				pendingAssistantContent = content
+				pendingAssistantContent = typeof content === "string" ? content : ""
 			} else {
 				// Flush pending assistant if any
 				if (pendingAssistantContent) {
