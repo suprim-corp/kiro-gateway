@@ -16,7 +16,7 @@ export const FALLBACK_MODELS = [
 	{ modelId: "claude-opus-4.6" },
 	{ modelId: "claude-haiku-4.5" },
 	{ modelId: "claude-3.7-sonnet" },
-	{ modelId: "deepseek-v3.2" },
+	{ modelId: "deepseek-3.2" },
 	{ modelId: "glm-5" },
 	{ modelId: "minimax-m2.5" },
 	{ modelId: "minimax-m2.1" },

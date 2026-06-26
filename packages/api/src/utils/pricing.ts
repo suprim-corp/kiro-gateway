@@ -5,6 +5,7 @@ interface ModelPricing {
 }
 
 const PRICING: Record<string, ModelPricing> = {
+	"auto": { input: 3, output: 15 },
 	"claude-sonnet-4": { input: 3, output: 15 },
 	"claude-sonnet-4.5": { input: 3, output: 15 },
 	"claude-sonnet-4.6": { input: 3, output: 15 },
@@ -14,6 +15,7 @@ const PRICING: Record<string, ModelPricing> = {
 	"claude-haiku-4.5": { input: 0.8, output: 4 },
 	"claude-3.7-sonnet": { input: 3, output: 15 },
 	"deepseek-v3.2": { input: 0.27, output: 1.1 },
+	"deepseek-3.2": { input: 0.27, output: 1.1 },
 	"glm-5": { input: 0.5, output: 2 },
 	"minimax-m2.5": { input: 0.5, output: 2 },
 	"minimax-m2.1": { input: 0.5, output: 2 },
@@ -23,8 +25,8 @@ const PRICING: Record<string, ModelPricing> = {
 const MODEL_ALIASES: Record<string, string> = {
 	"claude-opus-4-6": "claude-opus-4.6",
 	"claude-opus-4-5": "claude-opus-4.5",
-	"claude-sonnet-4-5": "claude-sonnet-4.5",
 	"claude-sonnet-4-6": "claude-sonnet-4.6",
+	"claude-sonnet-4-5": "claude-sonnet-4.5",
 	"claude-haiku-4-5": "claude-haiku-4.5",
 }
 

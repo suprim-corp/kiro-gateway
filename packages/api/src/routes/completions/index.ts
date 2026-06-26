@@ -32,9 +32,16 @@ export const completionsRoutes = new Elysia({ prefix: "/v1" })
 			.getAvailableModels()
 			.filter((id) => !env.DISABLED_MODELS.includes(id))
 
+		const expanded: string[] = []
+		for (const id of allModels) {
+			expanded.push(id)
+			const hyphenated = id.replace(/^(claude-(?:sonnet|opus|haiku)-)(\d+)\.(\d+)$/, "$1$2-$3")
+			if (hyphenated !== id) expanded.push(hyphenated)
+		}
+
 		return {
 			object: "list",
-			data: allModels.map((id) => ({
+			data: expanded.map((id) => ({
 				id,
 				object: "model",
 				created: 1700000000,
