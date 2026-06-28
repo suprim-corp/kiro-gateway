@@ -45,6 +45,7 @@ interface VirtualKey {
 	budgetPeriod: string | null
 	budgetTokens: number | null
 	budgetRequests: number | null
+	budgetCost: number | null
 	usage: { hour: number; day: number; week: number; month: number }
 	totalRequests: number
 	totalTokens: number
@@ -92,6 +93,7 @@ export function useCreateKey() {
 			budgetPeriod?: string | null
 			budgetTokens?: number | null
 			budgetRequests?: number | null
+			budgetCost?: number | null
 		}) =>
 			apiFetch<{ key: string }>("/admin/keys", {
 				method: "POST",
@@ -131,15 +133,17 @@ export function useUpdateKeyBudget() {
 			budgetPeriod,
 			budgetTokens,
 			budgetRequests,
+			budgetCost,
 		}: {
 			id: string
 			budgetPeriod: string | null
 			budgetTokens: number | null
 			budgetRequests: number | null
+			budgetCost: number | null
 		}) =>
 			apiFetch(`/admin/keys/${id}`, {
 				method: "PATCH",
-				body: JSON.stringify({ budgetPeriod, budgetTokens, budgetRequests }),
+				body: JSON.stringify({ budgetPeriod, budgetTokens, budgetRequests, budgetCost }),
 			}),
 		onSuccess: () => queryClient.invalidateQueries({ queryKey: ["keys"] }),
 	})
@@ -149,6 +153,7 @@ interface BudgetUsageResponse {
 	budgetPeriod: string | null
 	tokens: { used: number; limit: number | null }
 	requests: { used: number; limit: number | null }
+	cost: { used: number; limit: number | null }
 }
 
 export function useKeyBudget(keyId: string | null) {

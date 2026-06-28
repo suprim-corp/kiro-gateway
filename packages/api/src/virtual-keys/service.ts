@@ -1,6 +1,8 @@
 import { and, eq, isNull, sql } from "drizzle-orm"
 import { db } from "../db"
 import { virtualKeys } from "../db/schema"
+import { getKeyCostSince } from "../logging"
+import { logger } from "../logging/logger"
 
 const KEY_PREFIX = "sk-"
 
@@ -12,6 +14,7 @@ export interface CreateKeyInput {
 	budgetPeriod?: string | null
 	budgetTokens?: number | null
 	budgetRequests?: number | null
+	budgetCost?: number | null // cents
 }
 
 export interface UpdateKeyInput {
@@ -23,6 +26,7 @@ export interface UpdateKeyInput {
 	budgetPeriod?: string | null
 	budgetTokens?: number | null
 	budgetRequests?: number | null
+	budgetCost?: number | null // cents
 }
 
 export interface VirtualKeyRow {
@@ -45,6 +49,20 @@ export interface VirtualKeyRow {
 	totalTokens: number
 	lastUsedAt: number | null
 	createdAt: number
+}
+
+// budgetPeriod stores "day" or "day|500" (period|costCents)
+function encodeBudgetPeriod(period: string | null, costCents: number | null): string | null {
+	if (!period) return null
+	if (costCents != null) return `${period}|${costCents}`
+	return period
+}
+
+function parseBudgetPeriod(raw: string | null): { period: string | null; costCents: number | null } {
+	if (!raw) return { period: null, costCents: null }
+	const idx = raw.indexOf("|")
+	if (idx === -1) return { period: raw, costCents: null }
+	return { period: raw.slice(0, idx), costCents: Number(raw.slice(idx + 1)) }
 }
 
 function generateKeyId(): string {
@@ -86,7 +104,7 @@ export async function createKey(
 		allowedModels: input.allowedModels
 			? JSON.stringify(input.allowedModels)
 			: null,
-		budgetPeriod: input.budgetPeriod ?? null,
+		budgetPeriod: encodeBudgetPeriod(input.budgetPeriod ?? null, input.budgetCost ?? null),
 		budgetTokens: input.budgetTokens ?? null,
 		budgetRequests: input.budgetRequests ?? null,
 		periodTokensUsed: 0,
@@ -148,16 +166,21 @@ export function updateKey(
 			? JSON.stringify(input.allowedModels)
 			: null
 	}
-	if (input.budgetPeriod !== undefined)
-		updates.budgetPeriod = input.budgetPeriod
 	if (input.budgetTokens !== undefined)
 		updates.budgetTokens = input.budgetTokens
 	if (input.budgetRequests !== undefined)
 		updates.budgetRequests = input.budgetRequests
-	if (input.budgetPeriod !== undefined) {
-		updates.periodTokensUsed = 0
-		updates.periodRequestsUsed = 0
-		updates.periodResetAt = input.budgetPeriod ? getNextPeriodReset(input.budgetPeriod) : null
+	if (input.budgetPeriod !== undefined || input.budgetCost !== undefined) {
+		const existing = getKeyById(id)
+		const { period: oldPeriod, costCents: oldCost } = parseBudgetPeriod(existing?.budgetPeriod ?? null)
+		const newPeriod = input.budgetPeriod !== undefined ? input.budgetPeriod : oldPeriod
+		const newCost = input.budgetCost !== undefined ? input.budgetCost : oldCost
+		updates.budgetPeriod = encodeBudgetPeriod(newPeriod, newCost)
+		if (input.budgetPeriod !== undefined) {
+			updates.periodTokensUsed = 0
+			updates.periodRequestsUsed = 0
+			updates.periodResetAt = newPeriod ? getNextPeriodReset(newPeriod) : null
+		}
 	}
 
 	if (Object.keys(updates).length === 0) return getKeyById(id)
@@ -206,11 +229,31 @@ function getNextPeriodReset(period: string): number {
 	}
 }
 
+function getPeriodStart(period: string): number {
+	const now = new Date()
+	switch (period) {
+		case "hour":
+			return new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours()).getTime()
+		case "day":
+			return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+		case "week": {
+			const day = now.getDay()
+			const diff = now.getDate() - day + (day === 0 ? -6 : 1)
+			return new Date(now.getFullYear(), now.getMonth(), diff).getTime()
+		}
+		case "month":
+			return new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+		default:
+			return 0
+	}
+}
+
 function resetPeriodIfNeeded(key: VirtualKeyRow): VirtualKeyRow {
-	if (!key.budgetPeriod) return key
+	const { period } = parseBudgetPeriod(key.budgetPeriod)
+	if (!period) return key
 	const now = Date.now()
 	if (!key.periodResetAt || now >= key.periodResetAt) {
-		const nextReset = getNextPeriodReset(key.budgetPeriod)
+		const nextReset = getNextPeriodReset(period)
 		db.update(virtualKeys)
 			.set({ periodTokensUsed: 0, periodRequestsUsed: 0, periodResetAt: nextReset })
 			.where(eq(virtualKeys.id, key.id))
@@ -223,24 +266,46 @@ function resetPeriodIfNeeded(key: VirtualKeyRow): VirtualKeyRow {
 export interface BudgetUsage {
 	tokens: number
 	requests: number
+	cost: number // cents
 }
 
-export function getBudgetUsage(keyId: string, period: string): BudgetUsage {
+export function getBudgetUsage(keyId: string, rawBudgetPeriod: string): BudgetUsage {
 	const key = getKeyById(keyId)
-	if (!key) return { tokens: 0, requests: 0 }
+	if (!key) return { tokens: 0, requests: 0, cost: 0 }
 	const fresh = resetPeriodIfNeeded(key)
-	return { tokens: fresh.periodTokensUsed, requests: fresh.periodRequestsUsed }
+	const { period } = parseBudgetPeriod(rawBudgetPeriod)
+	if (!period) return { tokens: 0, requests: 0, cost: 0 }
+	const periodStart = getPeriodStart(period)
+	const costUsd = getKeyCostSince(keyId, periodStart)
+	const costCents = Math.round(costUsd * 100)
+	return { tokens: fresh.periodTokensUsed, requests: fresh.periodRequestsUsed, cost: costCents }
 }
 
 export function checkBudget(key: VirtualKeyRow): { allowed: boolean; reason?: string } {
-	if (!key.budgetPeriod) return { allowed: true }
+	const { period, costCents: costLimit } = parseBudgetPeriod(key.budgetPeriod)
+	if (!period) return { allowed: true }
 	const fresh = resetPeriodIfNeeded(key)
 
 	if (fresh.budgetTokens != null && fresh.periodTokensUsed >= fresh.budgetTokens) {
-		return { allowed: false, reason: `Token budget exceeded (${fresh.periodTokensUsed}/${fresh.budgetTokens} per ${fresh.budgetPeriod})` }
+		return { allowed: false, reason: `Token budget exceeded (${fresh.periodTokensUsed}/${fresh.budgetTokens} per ${period})` }
 	}
 	if (fresh.budgetRequests != null && fresh.periodRequestsUsed >= fresh.budgetRequests) {
-		return { allowed: false, reason: `Request budget exceeded (${fresh.periodRequestsUsed}/${fresh.budgetRequests} per ${fresh.budgetPeriod})` }
+		return { allowed: false, reason: `Request budget exceeded (${fresh.periodRequestsUsed}/${fresh.budgetRequests} per ${period})` }
+	}
+	if (costLimit != null) {
+		try {
+			const periodStart = getPeriodStart(period)
+			const costUsd = getKeyCostSince(fresh.id, periodStart)
+			const currentCents = Math.round(costUsd * 100)
+			logger.debug(`[budget] key=${fresh.id} cost=${currentCents}c limit=${costLimit}c period=${period}`)
+			if (currentCents >= costLimit) {
+				return { allowed: false, reason: `Cost budget exceeded ($${(currentCents / 100).toFixed(2)}/$${(costLimit / 100).toFixed(2)} per ${period})` }
+			}
+		} catch (e) {
+			logger.error(`[budget] cost check failed for key=${fresh.id}`, e)
+		}
 	}
 	return { allowed: true }
 }
+
+export { parseBudgetPeriod }

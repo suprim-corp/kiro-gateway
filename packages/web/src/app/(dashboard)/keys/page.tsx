@@ -53,11 +53,12 @@ const BUDGET_PERIODS = [
 	{ value: "month", label: "Per Month" },
 ]
 
-function BudgetBadge({ period, tokens, requests }: { period: string | null; tokens: number | null; requests: number | null }) {
+function BudgetBadge({ period, tokens, requests, cost }: { period: string | null; tokens: number | null; requests: number | null; cost: number | null }) {
 	if (!period) return <span className="text-muted-foreground">—</span>
 	const parts: string[] = []
 	if (tokens != null) parts.push(`${tokens.toLocaleString()} tok`)
 	if (requests != null) parts.push(`${requests.toLocaleString()} req`)
+	if (cost != null) parts.push(`$${(cost / 100).toFixed(2)}`)
 	return (
 		<span className="text-neon-cyan">
 			{parts.join(" / ")}/{period}
@@ -65,18 +66,20 @@ function BudgetBadge({ period, tokens, requests }: { period: string | null; toke
 	)
 }
 
-function BudgetDialog({ keyId, keyName, currentPeriod, currentTokens, currentRequests, open, onClose }: {
+function BudgetDialog({ keyId, keyName, currentPeriod, currentTokens, currentRequests, currentCost, open, onClose }: {
 	keyId: string
 	keyName: string
 	currentPeriod: string | null
 	currentTokens: number | null
 	currentRequests: number | null
+	currentCost: number | null
 	open: boolean
 	onClose: () => void
 }) {
 	const [period, setPeriod] = useState(currentPeriod ?? "")
 	const [tokens, setTokens] = useState(currentTokens?.toString() ?? "")
 	const [requests, setRequests] = useState(currentRequests?.toString() ?? "")
+	const [cost, setCost] = useState(currentCost != null ? (currentCost / 100).toString() : "")
 	const updateBudget = useUpdateKeyBudget()
 	const { data: usage } = useKeyBudget(period ? keyId : null)
 
@@ -87,6 +90,7 @@ function BudgetDialog({ keyId, keyName, currentPeriod, currentTokens, currentReq
 				budgetPeriod: period || null,
 				budgetTokens: tokens ? Number(tokens) : null,
 				budgetRequests: requests ? Number(requests) : null,
+				budgetCost: cost ? Math.round(Number(cost) * 100) : null,
 			},
 			{ onSuccess: onClose },
 		)
@@ -119,7 +123,7 @@ function BudgetDialog({ keyId, keyName, currentPeriod, currentTokens, currentReq
 							</DropdownMenuContent>
 						</DropdownMenu>
 					</div>
-					<div className="grid grid-cols-2 gap-4">
+					<div className="grid grid-cols-3 gap-4">
 						<div className="space-y-2">
 							<label className="block font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Token Limit</label>
 							<Input
@@ -142,6 +146,18 @@ function BudgetDialog({ keyId, keyName, currentPeriod, currentTokens, currentReq
 								disabled={!period}
 							/>
 						</div>
+						<div className="space-y-2">
+							<label className="block font-mono text-[10px] uppercase tracking-widest text-muted-foreground">Cost Limit ($)</label>
+							<Input
+								type="number"
+								step="0.01"
+								placeholder="Unlimited"
+								value={cost}
+								onChange={(e) => setCost(e.target.value)}
+								className="h-9"
+								disabled={!period}
+							/>
+						</div>
 					</div>
 					{usage && usage.budgetPeriod && (
 						<div className="border border-border/40 p-3 space-y-1">
@@ -153,6 +169,10 @@ function BudgetDialog({ keyId, keyName, currentPeriod, currentTokens, currentReq
 							<div className="flex justify-between font-mono text-xs">
 								<span>Requests</span>
 								<span>{usage.requests.used.toLocaleString()}{usage.requests.limit != null && <span className="text-muted-foreground"> / {usage.requests.limit.toLocaleString()}</span>}</span>
+							</div>
+							<div className="flex justify-between font-mono text-xs">
+								<span>Cost</span>
+								<span>${(usage.cost.used / 100).toFixed(2)}{usage.cost.limit != null && <span className="text-muted-foreground"> / ${(usage.cost.limit / 100).toFixed(2)}</span>}</span>
 							</div>
 						</div>
 					)}
@@ -329,7 +349,7 @@ function KeysContent() {
 									{key.rateLimitPerMin}/min
 								</td>
 								<td className="px-4 py-2.5 font-mono text-[10px]">
-									<BudgetBadge period={key.budgetPeriod} tokens={key.budgetTokens} requests={key.budgetRequests} />
+									<BudgetBadge period={key.budgetPeriod} tokens={key.budgetTokens} requests={key.budgetRequests} cost={key.budgetCost} />
 								</td>
 								<td className="px-4 py-2.5 font-mono text-[10px]">
 									{key.totalRequests.toLocaleString()}
@@ -417,6 +437,7 @@ function KeysContent() {
 					currentPeriod={editingKey.budgetPeriod}
 					currentTokens={editingKey.budgetTokens}
 					currentRequests={editingKey.budgetRequests}
+					currentCost={editingKey.budgetCost}
 					open={!!editingBudget}
 					onClose={() => setEditingBudget(null)}
 				/>

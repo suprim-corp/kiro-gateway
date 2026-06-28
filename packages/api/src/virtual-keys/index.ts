@@ -9,6 +9,7 @@ export {
 	getBudgetUsage,
 	getKeyById,
 	listKeys,
+	parseBudgetPeriod,
 	recordUsage,
 	revokeKey,
 	updateKey,
