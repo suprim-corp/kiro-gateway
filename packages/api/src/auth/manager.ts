@@ -82,6 +82,7 @@ export class KiroAuthManager {
 	
 	private loadFromSqlite(dbPath: string) {
 		const resolved = resolve(dbPath.replace(/^~/, process.env.HOME ?? "~"))
+		logger.info(`[Auth] Opening SQLite: ${resolved} (exists=${existsSync(resolved)})`)
 		if (!existsSync(resolved)) {
 			logger.error(`[Auth] SQLite database not found: ${resolved}`)
 			return
@@ -89,7 +90,7 @@ export class KiroAuthManager {
 
 		const { Database } =
 			require("bun:sqlite") as typeof import("bun:sqlite")
-		const db = new Database(resolved, { readonly: true })
+		const db = new Database(resolved)
 
 		const tokenKeys = [
 			"kirocli:social:token",
