@@ -83,58 +83,64 @@ export class KiroAuthManager {
 	private loadFromSqlite(dbPath: string) {
 		const resolved = resolve(dbPath.replace(/^~/, process.env.HOME ?? "~"))
 		if (!existsSync(resolved)) {
-			console.error(`[Auth] SQLite database not found: ${resolved}`)
+			logger.error(`[Auth] SQLite database not found: ${resolved}`)
 			return
 		}
-		
+
 		const { Database } =
 			require("bun:sqlite") as typeof import("bun:sqlite")
 		const db = new Database(resolved, { readonly: true })
-		
+
 		const tokenKeys = [
 			"kirocli:social:token",
 			"kirocli:odic:token",
 			"codewhisperer:odic:token",
 		]
-		
+
 		interface DbRow {
 			value: string
 		}
-		
+
 		interface TokenData {
 			accessToken?: string
+			access_token?: string
 			refreshToken?: string
+			refresh_token?: string
 			expiresAt?: string
+			expires_at?: string
 		}
-		
+
 		interface RegData {
 			clientId?: string
 			clientSecret?: string
 			scopes?: string[]
 		}
-		
+
 		let tokenData: TokenData | null = null
+		let matchedKey: string | null = null
 		for (const key of tokenKeys) {
 			const row = db
 				.query("SELECT value FROM auth_kv WHERE key = ?")
 				.get(key) as DbRow | null
 			if (row?.value) {
 				tokenData = JSON.parse(row.value) as TokenData
+				matchedKey = key
 				break
 			}
 		}
-		
+
 		if (!tokenData) {
 			db.close()
 			throw new Error("No token found in SQLite database")
 		}
-		
-		this.accessToken = tokenData.accessToken ?? null
-		this.refreshToken = tokenData.refreshToken ?? null
-		this.expiresAt = tokenData.expiresAt
-			? new Date(tokenData.expiresAt)
-			: null
-		
+
+		this.accessToken = tokenData.accessToken ?? tokenData.access_token ?? null
+		this.refreshToken = tokenData.refreshToken ?? tokenData.refresh_token ?? null
+		const expiresRaw = tokenData.expiresAt ?? tokenData.expires_at
+		this.expiresAt = expiresRaw ? new Date(expiresRaw) : null
+
+		logger.info(`[Auth] Loaded token from SQLite (key=${matchedKey}, expires=${this.expiresAt?.toISOString()})`)
+
 		// Try loading device registration for SSO OIDC
 		const regKeys = [
 			"kirocli:odic:device-registration",
@@ -149,10 +155,11 @@ export class KiroAuthManager {
 				this.clientId = reg.clientId ?? null
 				this.clientSecret = reg.clientSecret ?? null
 				this.scopes = reg.scopes ?? null
+				logger.info(`[Auth] Loaded device registration (key=${key}, scopes=${this.scopes?.join(",")})`)
 				break
 			}
 		}
-		
+
 		db.close()
 	}
 	
@@ -274,16 +281,48 @@ export class KiroAuthManager {
 	}
 	
 	private saveTokenToFile(result: { accessToken: string; refreshToken: string; expiresAt: string }) {
-		if (!this.credentialSource || this.credentialSource.type !== "json") return
-		const filePath = resolve(this.credentialSource.path.replace(/^~/, process.env.HOME ?? "~"))
-		try {
-			const existing = existsSync(filePath) ? JSON.parse(readFileSync(filePath, "utf-8")) : {}
-			existing.accessToken = result.accessToken
-			existing.refreshToken = result.refreshToken
-			existing.expiresAt = result.expiresAt
-			writeFileSync(filePath, JSON.stringify(existing, null, 2))
-		} catch (e) {
-			console.error(`[Auth] Failed to save refreshed token: ${e instanceof Error ? e.message : e}`)
+		if (!this.credentialSource) return
+
+		if (this.credentialSource.type === "json") {
+			const filePath = resolve(this.credentialSource.path.replace(/^~/, process.env.HOME ?? "~"))
+			try {
+				const existing = existsSync(filePath) ? JSON.parse(readFileSync(filePath, "utf-8")) : {}
+				existing.accessToken = result.accessToken
+				existing.refreshToken = result.refreshToken
+				existing.expiresAt = result.expiresAt
+				writeFileSync(filePath, JSON.stringify(existing, null, 2))
+			} catch (e) {
+				console.error(`[Auth] Failed to save refreshed token to JSON: ${e instanceof Error ? e.message : e}`)
+			}
+		} else if (this.credentialSource.type === "sqlite") {
+			const dbPath = resolve(this.credentialSource.path.replace(/^~/, process.env.HOME ?? "~"))
+			try {
+				const { Database } = require("bun:sqlite") as typeof import("bun:sqlite")
+				const db = new Database(dbPath)
+				const tokenKeys = [
+					"kirocli:odic:token",
+					"kirocli:social:token",
+					"codewhisperer:odic:token",
+				]
+				// Find the key that exists
+				let targetKey = tokenKeys[0]
+				for (const key of tokenKeys) {
+					const row = db.query("SELECT key FROM auth_kv WHERE key = ?").get(key) as { key: string } | null
+					if (row) { targetKey = key; break }
+				}
+				const row = db.query("SELECT value FROM auth_kv WHERE key = ?").get(targetKey) as { value: string } | null
+				const existing = row ? JSON.parse(row.value) : {}
+				existing.accessToken = result.accessToken
+				existing.access_token = result.accessToken
+				existing.refreshToken = result.refreshToken
+				existing.refresh_token = result.refreshToken
+				existing.expiresAt = result.expiresAt
+				existing.expires_at = result.expiresAt
+				db.run("INSERT OR REPLACE INTO auth_kv (key, value) VALUES (?, ?)", [targetKey, JSON.stringify(existing)])
+				db.close()
+			} catch (e) {
+				console.error(`[Auth] Failed to save refreshed token to SQLite: ${e instanceof Error ? e.message : e}`)
+			}
 		}
 	}
 
