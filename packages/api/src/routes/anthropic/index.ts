@@ -88,7 +88,7 @@ export const anthropicRoutes = new Elysia({ prefix: "/v1" })
 				set.status = 429
 				return {
 					type: "error",
-					error: { type: "budget_exceeded", message: budget.reason },
+					error: { type: "rate_limit_error", message: budget.reason },
 				}
 			}
 			if (!checkModelAccess(auth.key, req.model)) {

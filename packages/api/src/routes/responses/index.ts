@@ -89,7 +89,9 @@ export const responsesRoutes = new Elysia({ prefix: "/v1" })
 				return {
 					error: {
 						message: budget.reason,
-						type: "budget_exceeded",
+						type: "insufficient_quota",
+						param: null,
+						code: "insufficient_quota",
 					},
 				}
 			}
