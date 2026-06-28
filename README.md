@@ -192,19 +192,38 @@ WEB_PORT=8080
 
 ### Credentials Volume
 
-Container mounts a directory containing credentials to `/app/creds`. Configure via `KIRO_CREDS_HOST_PATH` in `.env`:
+Container supports two credential sources:
+
+**Option 1: Kiro CLI SQLite (recommended)**
+
+Install and login with [Kiro CLI](https://kiro.dev/docs/cli/installation/) on the host machine first:
+
+```bash
+# Ubuntu
+wget https://desktop-release.q.us-east-1.amazonaws.com/latest/kiro-cli.deb
+sudo dpkg -i kiro-cli.deb
+
+# Then authenticate
+kiro
+```
+
+Then configure the mount in `.env`:
 
 ```env
-# MUST be a directory, NOT a file path
+KIRO_CLI_HOST_PATH="/root/.local/share/kiro-cli"
+```
+
+Gateway reads tokens directly from the CLI's SQLite database and persists refreshed tokens back. Both gateway and kiro-cli share the same token chain — as long as one of them keeps running, the token stays alive.
+
+**Option 2: JSON credential file (legacy)**
+
+```env
 KIRO_CREDS_HOST_PATH="/root/.aws/sso/cache"
 ```
 
-Default: `$HOME/.aws/sso/cache`. The directory must contain:
+Directory must contain `kiro-auth-token.json` and `{clientIdHash}.json` (device registration).
 
-- `kiro-auth-token.json` — access/refresh token
-- `{clientIdHash}.json` — device registration (Enterprise SSO OIDC)
-
-Gateway automatically saves refreshed tokens back to file after each successful refresh.
+Note: If the gateway container stops for longer than the token TTL (~1 hour), the refresh token expires and you'll need to re-login with `kiro-cli auth login` on the host.
 
 ## Development
 
