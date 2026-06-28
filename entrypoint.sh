@@ -2,6 +2,8 @@
 # Fix creds permissions so app user can read/write refreshed tokens
 chmod 664 /app/creds/*.json 2>/dev/null
 chown app:app /app/creds/*.json 2>/dev/null
+chmod 664 /app/kiro-cli/data.sqlite3* 2>/dev/null
+chown app:app /app/kiro-cli/data.sqlite3* 2>/dev/null
 
 # Start API (internal only, not exposed)
 cd /app/packages/api && su-exec app bun dist/index.js &
