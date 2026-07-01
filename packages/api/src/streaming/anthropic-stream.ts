@@ -21,60 +21,15 @@ export function createAnthropicStream(
 		return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`
 	}
 
-	function openTextBlock(controller: ReadableStreamDefaultController<string>) {
-		if (textBlockOpen) return
-		textBlockOpen = true
-		controller.enqueue(
-			sse("content_block_start", {
-				type: "content_block_start",
-				index: blockIndex,
-				content_block: { type: "text", text: "" },
-			}),
-		)
-	}
-
-	function closeTextBlock(controller: ReadableStreamDefaultController<string>) {
-		if (!textBlockOpen) return
-		textBlockOpen = false
-		controller.enqueue(
-			sse("content_block_stop", { type: "content_block_stop", index: blockIndex }),
-		)
-		blockIndex++
-	}
-
-	function emitToolCall(
-		controller: ReadableStreamDefaultController<string>,
-		tc: ToolUseEvent,
-	) {
-		closeTextBlock(controller)
-		const name = unprefixToolName(tc.name)
-		controller.enqueue(
-			sse("content_block_start", {
-				type: "content_block_start",
-				index: blockIndex,
-				content_block: { type: "tool_use", id: tc.id, name, input: {} },
-			}),
-		)
-		const CHUNK_SIZE = 16_384
-		const args = tc.arguments
-		for (let i = 0; i < args.length; i += CHUNK_SIZE) {
-			controller.enqueue(
-				sse("content_block_delta", {
-					type: "content_block_delta",
-					index: blockIndex,
-					delta: { type: "input_json_delta", partial_json: args.slice(i, i + CHUNK_SIZE) },
-				}),
-			)
-		}
-		controller.enqueue(
-			sse("content_block_stop", { type: "content_block_stop", index: blockIndex }),
-		)
-		blockIndex++
-	}
-
 	return new ReadableStream<string>({
 		async start(controller) {
-			controller.enqueue(
+			let closed = false
+			const safe = {
+				enqueue(chunk: string) { if (!closed) controller.enqueue(chunk) },
+				close() { if (!closed) { closed = true; controller.close() } },
+			}
+
+			safe.enqueue(
 				sse("message_start", {
 					type: "message_start",
 					message: {
@@ -92,8 +47,8 @@ export function createAnthropicStream(
 
 			const reader = kiroResponse.body?.getReader()
 			if (!reader) {
-				controller.enqueue(sse("message_stop", { type: "message_stop" }))
-				controller.close()
+				safe.enqueue(sse("message_stop", { type: "message_stop" }))
+				safe.close()
 				return
 			}
 
@@ -104,11 +59,21 @@ export function createAnthropicStream(
 
 					const events = parser.feed(value)
 					for (const event of events) {
+						if (closed) break
 						if (event.type === "content") {
 							const text = event.data as string
 							fullText += text
-							openTextBlock(controller)
-							controller.enqueue(
+							if (!textBlockOpen) {
+								textBlockOpen = true
+								safe.enqueue(
+									sse("content_block_start", {
+										type: "content_block_start",
+										index: blockIndex,
+										content_block: { type: "text", text: "" },
+									}),
+								)
+							}
+							safe.enqueue(
 								sse("content_block_delta", {
 									type: "content_block_delta",
 									index: blockIndex,
@@ -116,8 +81,23 @@ export function createAnthropicStream(
 								}),
 							)
 						} else if (event.type === "tool_use") {
-							logger.debug(`[Anthropic stream] tool_use: ${(event.data as ToolUseEvent).name} id=${(event.data as ToolUseEvent).id}`)
-							emitToolCall(controller, event.data as ToolUseEvent)
+							const tc = event.data as ToolUseEvent
+							logger.debug(`[Anthropic stream] tool_use: ${tc.name} id=${tc.id}`)
+							toolCalls.push(tc)
+							// close text block
+							if (textBlockOpen) {
+								textBlockOpen = false
+								safe.enqueue(sse("content_block_stop", { type: "content_block_stop", index: blockIndex }))
+								blockIndex++
+							}
+							const name = unprefixToolName(tc.name)
+							safe.enqueue(sse("content_block_start", { type: "content_block_start", index: blockIndex, content_block: { type: "tool_use", id: tc.id, name, input: {} } }))
+							const args = tc.arguments
+							for (let ci = 0; ci < args.length; ci += 16_384) {
+								safe.enqueue(sse("content_block_delta", { type: "content_block_delta", index: blockIndex, delta: { type: "input_json_delta", partial_json: args.slice(ci, ci + 16_384) } }))
+							}
+							safe.enqueue(sse("content_block_stop", { type: "content_block_stop", index: blockIndex }))
+							blockIndex++
 						}
 					}
 				}
@@ -125,10 +105,26 @@ export function createAnthropicStream(
 				logger.error(`[Anthropic stream] ${err instanceof Error ? err.message : err}`)
 			}
 
+			if (closed) return
+
 			const flushed = parser.flush()
 			for (const event of flushed) {
 				if (event.type === "tool_use") {
-					emitToolCall(controller, event.data as ToolUseEvent)
+					const tc = event.data as ToolUseEvent
+					toolCalls.push(tc)
+					if (textBlockOpen) {
+						textBlockOpen = false
+						safe.enqueue(sse("content_block_stop", { type: "content_block_stop", index: blockIndex }))
+						blockIndex++
+					}
+					const name = unprefixToolName(tc.name)
+					safe.enqueue(sse("content_block_start", { type: "content_block_start", index: blockIndex, content_block: { type: "tool_use", id: tc.id, name, input: {} } }))
+					const args = tc.arguments
+					for (let ci = 0; ci < args.length; ci += 16_384) {
+						safe.enqueue(sse("content_block_delta", { type: "content_block_delta", index: blockIndex, delta: { type: "input_json_delta", partial_json: args.slice(ci, ci + 16_384) } }))
+					}
+					safe.enqueue(sse("content_block_stop", { type: "content_block_stop", index: blockIndex }))
+					blockIndex++
 				}
 			}
 
@@ -137,25 +133,42 @@ export function createAnthropicStream(
 				const seen = new Set(toolCalls.map((t) => t.id))
 				for (const bt of bracketTools) {
 					if (!seen.has(bt.id)) {
-						emitToolCall(controller, bt)
+						toolCalls.push(bt)
+						if (textBlockOpen) {
+							textBlockOpen = false
+							safe.enqueue(sse("content_block_stop", { type: "content_block_stop", index: blockIndex }))
+							blockIndex++
+						}
+						const name = unprefixToolName(bt.name)
+						safe.enqueue(sse("content_block_start", { type: "content_block_start", index: blockIndex, content_block: { type: "tool_use", id: bt.id, name, input: {} } }))
+						const args = bt.arguments
+						for (let ci = 0; ci < args.length; ci += 16_384) {
+							safe.enqueue(sse("content_block_delta", { type: "content_block_delta", index: blockIndex, delta: { type: "input_json_delta", partial_json: args.slice(ci, ci + 16_384) } }))
+						}
+						safe.enqueue(sse("content_block_stop", { type: "content_block_stop", index: blockIndex }))
+						blockIndex++
 					}
 				}
 			}
 
-			closeTextBlock(controller)
+			if (textBlockOpen) {
+				textBlockOpen = false
+				safe.enqueue(sse("content_block_stop", { type: "content_block_stop", index: blockIndex }))
+				blockIndex++
+			}
 
 			const outputTokens = countTokens(fullText)
 			const stopReason = toolCalls.length ? "tool_use" : "end_turn"
 
-			controller.enqueue(
+			safe.enqueue(
 				sse("message_delta", {
 					type: "message_delta",
 					delta: { stop_reason: stopReason, stop_sequence: null },
 					usage: { output_tokens: outputTokens },
 				}),
 			)
-			controller.enqueue(sse("message_stop", { type: "message_stop" }))
-			controller.close()
+			safe.enqueue(sse("message_stop", { type: "message_stop" }))
+			safe.close()
 			onDone?.({ input_tokens: inputTokens, output_tokens: outputTokens })
 		},
 	})
