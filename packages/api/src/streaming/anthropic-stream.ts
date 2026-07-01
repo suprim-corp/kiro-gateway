@@ -168,6 +168,10 @@ export function createAnthropicStream(
 			const outputTokens = countTokens(fullText)
 			const stopReason = toolCalls.length ? "tool_use" : "end_turn"
 
+			if (!fullText && !toolCalls.length) {
+				logger.warn(`[Anthropic stream] Empty response — no content or tool calls emitted`)
+			}
+
 			safe.enqueue(
 				sse("message_delta", {
 					type: "message_delta",
