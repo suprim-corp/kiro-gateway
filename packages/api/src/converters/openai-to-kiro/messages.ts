@@ -1,5 +1,4 @@
 import { extractImages, extractTextContent } from "./content"
-import { logger } from "../../logging/logger"
 import type { KiroHistoryEntry, KiroImageBlock, OpenAIMessage } from "./types"
 
 export function convertMessages(messages: OpenAIMessage[]): {
@@ -69,14 +68,35 @@ export function convertMessages(messages: OpenAIMessage[]): {
 		turns.unshift({ role: "user", content: "(empty placeholder)" })
 	}
 
-	// Ensure alternating roles
+	// Ensure alternating roles — merge or insert fillers as needed
 	const alternating: Turn[] = []
 	for (const turn of turns) {
 		if (alternating.length > 0) {
 			const last = alternating[alternating.length - 1]
 			if (turn.role === last.role) {
-				const filler = turn.role === "user" ? "assistant" : "user"
-				alternating.push({ role: filler, content: "(empty placeholder)" })
+				// If both are assistant, merge tool_calls + content
+				if (turn.role === "assistant") {
+					if (turn.tool_calls?.length) {
+						last.tool_calls = [...(last.tool_calls ?? []), ...turn.tool_calls]
+					}
+					if (turn.content) {
+						last.content = last.content ? `${last.content}\n\n${turn.content}` : turn.content
+					}
+					continue
+				}
+				// If both are user, merge tool_results + content
+				if (turn.role === "user") {
+					if (turn.tool_results?.length) {
+						last.tool_results = [...(last.tool_results ?? []), ...turn.tool_results]
+					}
+					if (turn.content && turn.content !== "(empty placeholder)") {
+						last.content = last.content ? `${last.content}\n\n${turn.content}` : turn.content
+					}
+					if (turn.images?.length) {
+						last.images = [...(last.images ?? []), ...turn.images]
+					}
+					continue
+				}
 			}
 		}
 		alternating.push(turn)
@@ -143,25 +163,6 @@ export function convertMessages(messages: OpenAIMessage[]): {
 			}
 
 			converted.push(assistantEntry)
-		}
-	}
-
-	// Enforce: each user turn's toolResults count must not exceed the preceding assistant turn's toolUses count
-	for (let i = 1; i < converted.length; i++) {
-		const cur = converted[i]
-		const prev = converted[i - 1]
-		const results = cur.userInputMessage?.userInputMessageContext?.toolResults
-		const uses = prev.assistantResponseMessage?.toolUses
-		if (results && results.length > 0) {
-			const maxAllowed = uses?.length ?? 0
-			if (maxAllowed === 0) {
-				logger.warn(`[Converter] Dropping ${results.length} orphan toolResults at turn ${i} (no toolUses in prev turn). IDs: ${results.map((r: any) => r.toolUseId).join(", ")}`)
-				delete cur.userInputMessage!.userInputMessageContext
-			} else if (results.length > maxAllowed) {
-				const dropped = results.slice(maxAllowed)
-				logger.warn(`[Converter] Trimming toolResults at turn ${i}: ${results.length} results > ${maxAllowed} toolUses. Dropped IDs: ${dropped.map((r: any) => r.toolUseId).join(", ")}`)
-				cur.userInputMessage!.userInputMessageContext!.toolResults = results.slice(0, maxAllowed)
-			}
 		}
 	}
 
