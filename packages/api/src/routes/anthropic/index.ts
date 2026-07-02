@@ -169,6 +169,7 @@ export const anthropicRoutes = new Elysia({ prefix: "/v1" })
 
 		if (req.stream) {
 			const inputTokens = estimateRequestTokens(openaiMessages, openaiTools)
+			logger.info(`[Anthropic] input_tokens=${inputTokens} (messages=${openaiMessages.length}, tools=${openaiTools?.length ?? 0})`)
 			const stream = createAnthropicStream(
 				response,
 				resolvedModel,

@@ -75,6 +75,13 @@ export function convertMessages(messages: AnthropicMessage[]): OpenAIMessage[] {
 						.filter((b) => b.type === "text" && b.text)
 						.map((b) => b.text)
 						.join("")
+					// Extract images from tool_result content (e.g., screenshots from MCP tools)
+					for (const b of block.content) {
+						if (b.type === "image" && b.source?.data) {
+							const mediaType = b.source.media_type ?? "image/png"
+							imageParts.push({ type: "image_url", image_url: { url: `data:${mediaType};base64,${b.source.data}` } })
+						}
+					}
 				}
 				toolResults.push({ tool_call_id: block.tool_use_id, content })
 			}

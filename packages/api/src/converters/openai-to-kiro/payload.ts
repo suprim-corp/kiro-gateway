@@ -1,4 +1,5 @@
 import type { KiroAuthManager } from "../../auth/manager"
+import { logger } from "../../logging/logger"
 import { normalizeModelName } from "../../models/resolver"
 import { convertMessages } from "./messages"
 import { convertTools } from "./tools"
@@ -7,6 +8,8 @@ import type {
 	KiroPayload,
 	KiroUserInputMessage,
 } from "./types"
+
+const MAX_PAYLOAD_BYTES = 600_000
 
 export function buildKiroPayload(
 	req: ChatCompletionRequest,
@@ -74,7 +77,6 @@ export function buildKiroPayload(
 		for (const entry of history) {
 			if (entry.userInputMessage) {
 				entry.userInputMessage.modelId = modelId
-				// strip base64 images from history to avoid re-sending megabytes every turn
 				delete entry.userInputMessage.images
 			}
 		}
@@ -85,5 +87,27 @@ export function buildKiroPayload(
 		payload.profileArn = auth.profileArn
 	}
 
+	// trim oldest history pairs if payload exceeds Kiro's ~615kb limit
+	trimPayload(payload)
+
 	return payload
+}
+
+function trimPayload(payload: KiroPayload): void {
+	const history = payload.conversationState.history
+	if (!history?.length) return
+
+	while (history.length > 2 && JSON.stringify(payload).length > MAX_PAYLOAD_BYTES) {
+		history.shift()
+		history.shift()
+	}
+
+	// Ensure history starts with a userInputMessage
+	while (history.length && !history[0].userInputMessage) {
+		history.shift()
+	}
+
+	if (!history.length) {
+		delete payload.conversationState.history
+	}
 }
