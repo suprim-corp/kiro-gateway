@@ -246,3 +246,28 @@ export const anthropicRoutes = new Elysia({ prefix: "/v1" })
 			usage: { input_tokens: inputTokens, output_tokens: outputTokens },
 		}
 	})
+	.post("/messages/count_tokens", async ({ body, set, authResult }) => {
+		if (!authResult) {
+			set.status = 401
+			return { type: "error", error: { type: "authentication_error", message: "Invalid or missing API key" } }
+		}
+
+		const req = body as AnthropicRequest
+		if (!req.messages?.length) {
+			return { input_tokens: 0 }
+		}
+
+		const openaiMessages: OpenAIMessage[] = []
+		if (req.system) {
+			const systemText = typeof req.system === "string"
+				? req.system
+				: req.system.map((b) => b.text).join("\n\n")
+			openaiMessages.push({ role: "system", content: systemText })
+		}
+		openaiMessages.push(...convertMessages(req.messages))
+
+		const openaiTools = req.tools ? convertTools(req.tools) : undefined
+		const inputTokens = estimateRequestTokens(openaiMessages, openaiTools)
+
+		return { input_tokens: inputTokens }
+	})

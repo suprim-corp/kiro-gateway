@@ -47,12 +47,16 @@ export function convertMessages(messages: AnthropicMessage[]): OpenAIMessage[] {
 		}
 
 		const textParts: string[] = []
+		const imageParts: Array<{ type: "image_url"; image_url: { url: string } }> = []
 		const toolCalls: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> = []
 		const toolResults: Array<{ tool_call_id: string; content: string }> = []
 
 		for (const block of msg.content) {
 			if (block.type === "text" && block.text) {
 				textParts.push(block.text)
+			} else if (block.type === "image" && block.source?.data) {
+				const mediaType = block.source.media_type ?? "image/png"
+				imageParts.push({ type: "image_url", image_url: { url: `data:${mediaType};base64,${block.source.data}` } })
 			} else if (block.type === "tool_use" && block.id && block.name) {
 				toolCalls.push({
 					id: block.id,
@@ -84,12 +88,22 @@ export function convertMessages(messages: AnthropicMessage[]): OpenAIMessage[] {
 			if (toolCalls.length) m.tool_calls = toolCalls
 			result.push(m)
 		} else if (toolResults.length) {
-			if (textParts.length) {
-				result.push({ role: "user", content: textParts.join("") })
+			if (textParts.length || imageParts.length) {
+				const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+					...textParts.map((t) => ({ type: "text" as const, text: t })),
+					...imageParts,
+				]
+				result.push({ role: "user", content: content.length === 1 && !imageParts.length ? textParts.join("") : content })
 			}
 			for (const tr of toolResults) {
 				result.push({ role: "tool", content: tr.content, tool_call_id: tr.tool_call_id })
 			}
+		} else if (imageParts.length) {
+			const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+				...textParts.map((t) => ({ type: "text" as const, text: t })),
+				...imageParts,
+			]
+			result.push({ role: "user", content })
 		} else {
 			result.push({ role: "user", content: textParts.join("") })
 		}
