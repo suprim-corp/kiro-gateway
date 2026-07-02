@@ -95,15 +95,18 @@ export function convertMessages(messages: AnthropicMessage[]): OpenAIMessage[] {
 			if (toolCalls.length) m.tool_calls = toolCalls
 			result.push(m)
 		} else if (toolResults.length) {
-			if (textParts.length || imageParts.length) {
-				const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
-					...textParts.map((t) => ({ type: "text" as const, text: t })),
-					...imageParts,
-				]
-				result.push({ role: "user", content: content.length === 1 && !imageParts.length ? textParts.join("") : content })
+			if (textParts.length) {
+				result.push({ role: "user", content: textParts.join("") })
 			}
 			for (const tr of toolResults) {
 				result.push({ role: "tool", content: tr.content, tool_call_id: tr.tool_call_id })
+			}
+			// Images from tool_results go as a follow-up user message (will be merged by messages.ts)
+			if (imageParts.length) {
+				const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
+					...imageParts,
+				]
+				result.push({ role: "user", content })
 			}
 		} else if (imageParts.length) {
 			const content: Array<{ type: string; text?: string; image_url?: { url: string } }> = [
