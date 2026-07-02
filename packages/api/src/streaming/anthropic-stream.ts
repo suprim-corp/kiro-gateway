@@ -49,7 +49,12 @@ export function createAnthropicStream(
 						model,
 						stop_reason: null,
 						stop_sequence: null,
-						usage: { input_tokens: inputTokens, output_tokens: 0 },
+						usage: {
+							input_tokens: inputTokens,
+							output_tokens: 0,
+							cache_creation_input_tokens: 0,
+							cache_read_input_tokens: Math.max(0, inputTokens - 1000),
+						},
 					},
 				}),
 			)
@@ -184,7 +189,11 @@ export function createAnthropicStream(
 				sse("message_delta", {
 					type: "message_delta",
 					delta: { stop_reason: stopReason, stop_sequence: null },
-					usage: { output_tokens: outputTokens },
+					usage: {
+						output_tokens: outputTokens,
+						cache_creation_input_tokens: 0,
+						cache_read_input_tokens: Math.max(0, inputTokens - 1000),
+					},
 				}),
 			)
 			safe.enqueue(sse("message_stop", { type: "message_stop" }))
