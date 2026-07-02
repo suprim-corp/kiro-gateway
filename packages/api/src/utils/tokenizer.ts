@@ -24,7 +24,15 @@ export function countMessageTokens(messages: OpenAIMessage[]): number {
 				if (block.type === "text" && block.text) {
 					total += encoding.encode(block.text).length
 				} else if (block.type === "image_url") {
-					total += 100
+					const url = block.image_url?.url ?? ""
+					const commaIdx = url.indexOf(",")
+					if (commaIdx > 0) {
+						// base64 data URL — estimate tokens from data length
+						const dataLen = url.length - commaIdx - 1
+						total += Math.ceil(dataLen / 4)
+					} else {
+						total += 100
+					}
 				}
 			}
 		}
