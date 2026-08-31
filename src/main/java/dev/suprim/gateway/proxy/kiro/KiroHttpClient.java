@@ -204,7 +204,19 @@ public class KiroHttpClient {
 				Thread.currentThread().interrupt();
 				throw e;
 			} catch (IOException e) {
-				throw e;
+				lastError = e;
+				if (attempt == maxRetries - 1) {
+					throw e;
+				}
+				long delay = BASE_RETRY_DELAY * (1L << attempt);
+				log.error(
+						LogTag.KIRO + "Network error: {}, waiting {}ms (attempt {}/{})",
+						e.getMessage(),
+						delay,
+						attempt + 1,
+						maxRetries
+				);
+				Thread.sleep(delay);
 			} catch (Exception e) {
 				lastError = e;
 				long delay = BASE_RETRY_DELAY * (1L << attempt);

@@ -354,45 +354,70 @@ public class KiroUpstreamDispatcher {
 
 		if (preferred != null) {
 			KiroEndpoint ep = endpoints.get(preferred);
-			KiroResponse response = kiroClient.request(
-					"POST",
-					ep.url(),
-					payload,
-					stream,
-					accessToken,
-					isApiKey
-			);
-			if (response.status() == 200) {
-				return EndpointAttempt.served(response, ep.name());
-			}
-			if (response.status() == 429 || response.status() == 503) {
+			KiroResponse response = null;
+			try {
+				response = kiroClient.request(
+						"POST",
+						ep.url(),
+						payload,
+						stream,
+						accessToken,
+						isApiKey
+				);
+			} catch (Exception e) {
 				log.warn(
 						LogTag.KIRO +
-						"Account {} got {} from {}, trying next account",
-						account.name(), response.status(), ep.name()
+						"{} from preferred {}, falling back to all endpoints: {}",
+						e.getClass().getSimpleName(),
+						ep.name(),
+						e.getMessage()
 				);
-				drain(response.body());
-				return EndpointAttempt.rateLimited();
+				preferredEndpoint.remove(accountKey);
 			}
-			log.warn(
-					LogTag.KIRO +
-					"{} from preferred {}, falling back to all endpoints",
-					response.status(),
-					ep.name()
-			);
-			preferredEndpoint.remove(accountKey);
+			if (response != null) {
+				if (response.status() == 200) {
+					return EndpointAttempt.served(response, ep.name());
+				}
+				if (response.status() == 429 || response.status() == 503) {
+					log.warn(
+							LogTag.KIRO +
+							"Account {} got {} from {}, trying next account",
+							account.name(), response.status(), ep.name()
+					);
+					drain(response.body());
+					return EndpointAttempt.rateLimited();
+				}
+				log.warn(
+						LogTag.KIRO +
+						"{} from preferred {}, falling back to all endpoints",
+						response.status(),
+						ep.name()
+				);
+				preferredEndpoint.remove(accountKey);
+			}
 		}
 
 		for (int i = 0; i < endpoints.size(); i++) {
 			KiroEndpoint ep = endpoints.get(i);
-			KiroResponse response = kiroClient.request(
-					"POST",
-					ep.url(),
-					payload,
-					stream,
-					accessToken,
-					isApiKey
-			);
+			KiroResponse response;
+			try {
+				response = kiroClient.request(
+						"POST",
+						ep.url(),
+						payload,
+						stream,
+						accessToken,
+						isApiKey
+				);
+			} catch (Exception e) {
+				log.warn(
+						LogTag.KIRO + "Error from {} ({}): {}",
+						ep.name(),
+						ep.url(),
+						e.getMessage()
+				);
+				continue;
+			}
 			if (response.status() == 200) {
 				preferredEndpoint.put(accountKey, i);
 				return EndpointAttempt.served(response, ep.name());

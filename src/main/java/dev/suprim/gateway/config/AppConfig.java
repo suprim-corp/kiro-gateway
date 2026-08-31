@@ -24,7 +24,7 @@ public record AppConfig(
 	public AppConfig {
 		if (region == null || region.isBlank()) region = "us-east-1";
 		if (apiRegion == null || apiRegion.isBlank()) apiRegion = region;
-		if (firstTokenTimeout <= 0) firstTokenTimeout = 15;
+		if (firstTokenTimeout <= 0) firstTokenTimeout = 30;
 		if (streamingReadTimeout <= 0) streamingReadTimeout = 300;
 		if (firstTokenMaxRetries <= 0) firstTokenMaxRetries = 3;
 		if (disabledModels == null) disabledModels = "";

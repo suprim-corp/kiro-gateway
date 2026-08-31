@@ -30,7 +30,7 @@ suprim:
   region: ${KIRO_REGION:us-east-1}
   api-region: ${KIRO_API_REGION:}
   proxy-file: ${PROXY_FILE:data/proxies.json}
-  first-token-timeout: ${FIRST_TOKEN_TIMEOUT:15}
+  first-token-timeout: ${FIRST_TOKEN_TIMEOUT:30}
   streaming-read-timeout: ${STREAMING_READ_TIMEOUT:300}
   first-token-max-retries: ${FIRST_TOKEN_MAX_RETRIES:3}
   disabled-models: ${DISABLED_MODELS:}

@@ -183,11 +183,12 @@ public class KiroFacade {
 					req.request(),
 					req.format() == Format.RESPONSES
 			);
-		} catch (RuntimeException exception) {
+		} catch (Exception exception) {
 			httpRes.setStatus(503);
 			httpRes.setContentType("application/json");
 			httpRes.getWriter().write(
-					"{\"error\":{\"message\":\"" + exception.getMessage() +
+					"{\"error\":{\"message\":\"" +
+					(exception.getMessage() == null ? "Upstream unavailable" : exception.getMessage()) +
 					"\",\"type\":\"service_unavailable\"}}"
 			);
 			return ProviderOutcome.none();
