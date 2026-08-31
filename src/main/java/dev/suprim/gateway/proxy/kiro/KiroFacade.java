@@ -7,6 +7,7 @@ import dev.suprim.gateway.provider.kiro.KiroAuthManager;
 import dev.suprim.gateway.proxy.Format;
 import dev.suprim.gateway.proxy.InternalRequest;
 import dev.suprim.gateway.proxy.StreamConverter;
+import dev.suprim.gateway.proxy.SseError;
 import dev.suprim.gateway.proxy.SseHeartbeat;
 import dev.suprim.gateway.proxy.StreamHandler;
 import dev.suprim.gateway.proxy.StreamingEventWriter;
@@ -96,11 +97,91 @@ public class KiroFacade {
 			RequestLogCall call,
 			HttpServletResponse httpRes
 	) throws Exception {
+		return req.stream()
+				? handleStreaming(req, call, httpRes)
+				: handleBuffered(req, call, httpRes);
+	}
+
+	/**
+	 * Account rotation can spend a minute or more on backoff and endpoint fallback before the
+	 * first byte exists. The SSE stream therefore opens first: a heartbeat keeps the connection
+	 * alive across that window, at the cost of committing the response before the upstream
+	 * status is known, so failures are relayed as stream events instead of status codes.
+	 */
+	private ProviderOutcome handleStreaming(
+			ProxyRequest req,
+			RequestLogCall call,
+			HttpServletResponse httpRes
+	) throws Exception {
+		try (SseHeartbeat.Session session = sseHeartbeat.openEager(httpRes)) {
+			PrintWriter writer = session.writer();
+
+			KiroUpstreamDispatcher.DispatchResult dispatchResult;
+			try {
+				dispatchResult = upstreamDispatcher.dispatch(req.request(), true);
+			} catch (Exception exception) {
+				// Every failure has to land here. The response is already committed, so an
+				// exception escaping this block would close the stream after the priming byte
+				// and leave the client waiting on content that never comes.
+				log.error(
+						"[Proxy] Kiro dispatch failed: {}",
+						exception.getMessage()
+				);
+				SseError.emit(
+						writer,
+						req.format(),
+						503,
+						exception.getMessage() == null
+								? "Upstream unavailable"
+								: exception.getMessage(),
+						"service_unavailable"
+				);
+				return ProviderOutcome.none();
+			}
+
+			KiroResponse response = dispatchResult.response();
+			String accountId = dispatchResult.accountId();
+			if (response.status() != 200) {
+				return streamError(response, call, accountId, writer);
+			}
+
+			try {
+				return streamInto(session, response, req, call, accountId);
+			} catch (Exception exception) {
+				// A mid-stream break leaves the client with a truncated stream and no reason for
+				// it, so the reason is written into the stream before it ends.
+				log.error(
+						"[Proxy] Kiro stream broke mid-flight: {}",
+						exception.getMessage()
+				);
+				SseError.emit(
+						writer,
+						req.format(),
+						502,
+						exception.getMessage() == null
+								? "Stream interrupted"
+								: exception.getMessage(),
+						"upstream_error"
+				);
+				return call.upstreamError(
+						accountId,
+						502,
+						String.valueOf(exception.getMessage())
+				);
+			}
+		}
+	}
+
+	private ProviderOutcome handleBuffered(
+			ProxyRequest req,
+			RequestLogCall call,
+			HttpServletResponse httpRes
+	) throws Exception {
 		KiroUpstreamDispatcher.DispatchResult dispatchResult;
 		try {
 			dispatchResult = upstreamDispatcher.dispatch(
 					req.request(),
-					req.stream() || req.format() == Format.RESPONSES
+					req.format() == Format.RESPONSES
 			);
 		} catch (RuntimeException exception) {
 			httpRes.setStatus(503);
@@ -117,10 +198,7 @@ public class KiroFacade {
 		if (response.status() != 200) {
 			return handleError(response, call, accountId, httpRes);
 		}
-
-		return req.stream()
-				? handleStream(httpRes, response, req, call, accountId)
-				: handleNonStream(httpRes, response, req, call, accountId);
+		return handleNonStream(httpRes, response, req, call, accountId);
 	}
 
 	private ProviderOutcome handleError(
@@ -156,47 +234,72 @@ public class KiroFacade {
 		return call.upstreamError(accountId, response.status(), body);
 	}
 
-	private ProviderOutcome handleStream(
-			HttpServletResponse httpRes,
+	/** Relays the upstream body into a session the caller owns and keeps open. */
+	private ProviderOutcome streamInto(
+			SseHeartbeat.Session session,
 			KiroResponse response,
 			ProxyRequest req,
 			RequestLogCall call,
 			String accountId
 	) throws Exception {
-		try (SseHeartbeat.Session session = sseHeartbeat.open(httpRes)) {
-			PrintWriter writer = session.writer();
+		PrintWriter writer = session.writer();
 
-			boolean thinkingEnabled = req.format() != Format.ANTHROPIC
-			                          || req.request().thinkingEnabled();
+		boolean thinkingEnabled = req.format() != Format.ANTHROPIC
+		                          || req.request().thinkingEnabled();
 
-			StreamingEventWriter eventWriter = new StreamingEventWriter(
-					writer, streamConverter, req.format(), req.model(),
-					thinkingEnabled, req.inputTokens()
-			);
+		StreamingEventWriter eventWriter = new StreamingEventWriter(
+				writer, streamConverter, req.format(), req.model(),
+				thinkingEnabled, req.inputTokens()
+		);
 
-			StreamHandler.StreamResult result = streamHandler.streamToWriter(
-					response,
-					writer,
-					eventWriter,
-					call.startedAt()
-			);
+		StreamHandler.StreamResult result = streamHandler.streamToWriter(
+				response,
+				writer,
+				eventWriter,
+				call.startedAt()
+		);
 
-			eventWriter.finish(result.outputTokens());
+		eventWriter.finish(result.outputTokens());
 
-			if (req.virtualKeyId() != null && result.outputTokens() > 0) {
-				keyService.incrementUsage(
-						req.virtualKeyId(),
-						result.outputTokens()
-				);
-			}
-			return call.success(
-					accountId,
-					null,
-					result.outputTokens(),
-					result.firstTokenMs(),
-					result.credits()
+		if (req.virtualKeyId() != null && result.outputTokens() > 0) {
+			keyService.incrementUsage(
+					req.virtualKeyId(),
+					result.outputTokens()
 			);
 		}
+		return call.success(
+				accountId,
+				null,
+				result.outputTokens(),
+				result.firstTokenMs(),
+				result.credits()
+		);
+	}
+
+	/** The committed-stream counterpart of {@link #handleError}. */
+	private ProviderOutcome streamError(
+			KiroResponse response,
+			RequestLogCall call,
+			String accountId,
+			PrintWriter writer
+	) throws Exception {
+		String body;
+		try (InputStream is = response.body()) {
+			body = new String(is.readAllBytes());
+		}
+		log.error(
+				"[Proxy] Upstream {} body: {}",
+				response.status(),
+				body.length() > 500 ? body.substring(0, 500) : body
+		);
+		SseError.emit(
+				writer,
+				call.format(),
+				response.status(),
+				"Upstream error",
+				call.format() == Format.ANTHROPIC ? "api_error" : "upstream_error"
+		);
+		return call.upstreamError(accountId, response.status(), body);
 	}
 
 	private ProviderOutcome handleNonStream(

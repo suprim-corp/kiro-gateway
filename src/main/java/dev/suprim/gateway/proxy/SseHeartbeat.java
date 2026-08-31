@@ -19,6 +19,19 @@ public class SseHeartbeat {
 		return open(response, true);
 	}
 
+	/**
+	 * Opens a session and immediately commits the response with an SSE comment.
+	 * <p>
+	 * Intended for the window before the upstream has answered: an edge proxy times a request
+	 * out on the delay to the first byte, not on total duration, so the byte has to leave
+	 * before the upstream work starts rather than after it.
+	 */
+	public Session openEager(HttpServletResponse response) throws IOException {
+		Session session = open(response, true);
+		session.prime();
+		return session;
+	}
+
 	public Session open(
 			HttpServletResponse response,
 			boolean heartbeatEnabled
@@ -63,6 +76,17 @@ public class SseHeartbeat {
 
 		public PrintWriter writer() {
 			return writer;
+		}
+
+		/** Sends the first byte so the response is committed before any upstream work begins. */
+		private void prime() {
+			synchronized (lock) {
+				if (closed) {
+					return;
+				}
+				delegate.write(": open\n\n");
+				delegate.flush();
+			}
 		}
 
 		private void heartbeat() {

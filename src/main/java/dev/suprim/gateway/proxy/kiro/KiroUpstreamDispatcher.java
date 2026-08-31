@@ -23,6 +23,7 @@ import tools.jackson.databind.node.MissingNode;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -80,6 +81,14 @@ public class KiroUpstreamDispatcher {
 			"external_idp",
 			"api_key"
 	);
+
+	/**
+	 * Ceiling on the whole rotation. Each account can spend seconds on 429/5xx backoff across
+	 * three endpoints, so an unbounded loop leaves the client waiting minutes for a request that
+	 * every account has already declined. The heartbeat holds the connection open regardless;
+	 * this decides when waiting longer stops being worth it.
+	 */
+	private static final Duration ROTATION_BUDGET = Duration.ofSeconds(90);
 
 	private final KiroHttpClient kiroClient;
 	private final PayloadBuilder payloadBuilder;
@@ -144,8 +153,17 @@ public class KiroUpstreamDispatcher {
 		);
 		int maxAttempts = remainingAccounts.size();
 		DispatchResult invalidModelResult = null;
+		long deadline = System.currentTimeMillis() + ROTATION_BUDGET.toMillis();
 
 		for (int attempt = 0; !remainingAccounts.isEmpty(); attempt++) {
+			if (System.currentTimeMillis() > deadline) {
+				log.warn(
+						LogTag.KIRO +
+						"Rotation budget spent after {} accounts, giving up",
+						attempt
+				);
+				break;
+			}
 			StoredAccount account = accountRotator.next(
 					Provider.KIRO.name(),
 					List.copyOf(remainingAccounts)

@@ -14,6 +14,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 import java.util.Map;
 import java.util.Optional;
 
@@ -119,6 +120,13 @@ public class KiroHttpClient {
 				HttpRequest.Builder reqBuilder = HttpRequest.newBuilder()
 				                                            .uri(URI.create(url));
 				headers.forEach(reqBuilder::header);
+
+				// Bounds the wait for response headers only — the body streams through an
+				// InputStream, so a slow transfer is not cut short. Without this an upstream
+				// that accepts the connection and then stalls holds the thread indefinitely.
+				reqBuilder.timeout(
+						Duration.ofSeconds(config.firstTokenTimeout())
+				);
 
 				if ("POST".equals(method) && body != null) {
 					reqBuilder.POST(HttpRequest.BodyPublishers.ofString(body));
