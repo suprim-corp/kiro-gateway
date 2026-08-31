@@ -121,11 +121,9 @@ public class KiroHttpClient {
 				                                            .uri(URI.create(url));
 				headers.forEach(reqBuilder::header);
 
-				// Bounds the wait for response headers only — the body streams through an
-				// InputStream, so a slow transfer is not cut short. Without this an upstream
-				// that accepts the connection and then stalls holds the thread indefinitely.
+				// Bounds the wait for the request and streaming transfer
 				reqBuilder.timeout(
-						Duration.ofSeconds(config.firstTokenTimeout())
+						Duration.ofSeconds(config.streamingReadTimeout())
 				);
 
 				if ("POST".equals(method) && body != null) {

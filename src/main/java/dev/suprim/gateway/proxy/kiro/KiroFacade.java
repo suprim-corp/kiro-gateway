@@ -1,5 +1,6 @@
 package dev.suprim.gateway.proxy.kiro;
 
+import dev.suprim.gateway.logging.LogTag;
 import dev.suprim.gateway.logging.ProviderOutcome;
 import dev.suprim.gateway.logging.RequestLogCall;
 import dev.suprim.gateway.logging.RequestLogPublisher;
@@ -177,29 +178,34 @@ public class KiroFacade {
 			RequestLogCall call,
 			HttpServletResponse httpRes
 	) throws Exception {
-		KiroUpstreamDispatcher.DispatchResult dispatchResult;
 		try {
-			dispatchResult = upstreamDispatcher.dispatch(
+			KiroUpstreamDispatcher.DispatchResult dispatchResult = upstreamDispatcher.dispatch(
 					req.request(),
 					req.format() == Format.RESPONSES
 			);
+
+			KiroResponse response = dispatchResult.response();
+			String accountId = dispatchResult.accountId();
+			if (response.status() != 200) {
+				return handleError(response, call, accountId, httpRes);
+			}
+			return handleNonStream(httpRes, response, req, call, accountId);
 		} catch (Exception exception) {
-			httpRes.setStatus(503);
-			httpRes.setContentType("application/json");
-			httpRes.getWriter().write(
-					"{\"error\":{\"message\":\"" +
-					(exception.getMessage() == null ? "Upstream unavailable" : exception.getMessage()) +
-					"\",\"type\":\"service_unavailable\"}}"
+			log.error(
+					LogTag.KIRO + "Buffered request failed: {}",
+					exception.getMessage()
 			);
+			if (!httpRes.isCommitted()) {
+				httpRes.setStatus(503);
+				httpRes.setContentType("application/json; charset=utf-8");
+				httpRes.getWriter().write(
+						"{\"error\":{\"message\":\"" +
+						(exception.getMessage() == null ? "Upstream unavailable" : exception.getMessage()) +
+						"\",\"type\":\"service_unavailable\"}}"
+				);
+			}
 			return ProviderOutcome.none();
 		}
-
-		KiroResponse response = dispatchResult.response();
-		String accountId = dispatchResult.accountId();
-		if (response.status() != 200) {
-			return handleError(response, call, accountId, httpRes);
-		}
-		return handleNonStream(httpRes, response, req, call, accountId);
 	}
 
 	private ProviderOutcome handleError(
