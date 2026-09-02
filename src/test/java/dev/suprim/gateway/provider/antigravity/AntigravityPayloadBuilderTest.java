@@ -2,7 +2,10 @@ package dev.suprim.gateway.provider.antigravity;
 
 import dev.suprim.gateway.proxy.InternalRequest;
 import dev.suprim.gateway.proxy.Message;
+import dev.suprim.gateway.proxy.Tool;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 import java.util.Map;
@@ -219,5 +222,95 @@ class AntigravityPayloadBuilderTest {
 		int requestIdx = json.indexOf("\"request\"");
 		int contentsIdx = json.indexOf("\"contents\"");
 		assertTrue(requestIdx < contentsIdx);
+	}
+
+	@Test
+	void build_fillsItemsForTupleArraySchemas() {
+		JsonNode params = new JsonMapper().readTree("""
+				{
+				  "type": "object",
+				  "properties": {
+				    "where": {
+				      "type": "array",
+				      "items": {
+				        "type": "array",
+				        "prefixItems": [
+				          {"type": "string"},
+				          {"type": "string", "enum": ["eq", "ne"]},
+				          {}
+				        ]
+				      }
+				    },
+				    "tags": {"type": "array"}
+				  }
+				}
+				""");
+
+		InternalRequest request = InternalRequest.builder()
+				.model("gemini-2.5-flash")
+				.messages(List.of(Message.of("user", "Hi")))
+				.tools(List.of(Tool.builder()
+						.type("function")
+						.function(Tool.Function.builder()
+								.name("Artifact")
+								.description("desc")
+								.parameters(params)
+								.build())
+						.build()))
+				.build();
+
+		String json = AntigravityPayloadBuilder.build(
+				request, "gemini-2.5-flash", "projects/p1"
+		);
+		JsonNode where = new JsonMapper().readTree(json)
+		                                .path("request").path("tools").path(0)
+		                                .path("functionDeclarations").path(0)
+		                                .path("parameters").path("properties")
+		                                .path("where");
+
+		assertEquals("string", where.path("items").path("items").path("type").asString());
+		JsonNode tagItems = new JsonMapper().readTree(json)
+		                                   .path("request").path("tools").path(0)
+		                                   .path("functionDeclarations").path(0)
+		                                   .path("parameters").path("properties")
+		                                   .path("tags").path("items");
+		assertEquals("string", tagItems.path("type").asString());
+	}
+
+	@Test
+	void build_keepsExistingArrayItems() {
+		JsonNode params = new JsonMapper().readTree("""
+				{
+				  "type": "object",
+				  "properties": {
+				    "ids": {"type": "array", "items": {"type": "integer"}}
+				  }
+				}
+				""");
+
+		InternalRequest request = InternalRequest.builder()
+				.model("gemini-2.5-flash")
+				.messages(List.of(Message.of("user", "Hi")))
+				.tools(List.of(Tool.builder()
+						.type("function")
+						.function(Tool.Function.builder()
+								.name("T")
+								.parameters(params)
+								.build())
+						.build()))
+				.build();
+
+		String json = AntigravityPayloadBuilder.build(
+				request, "gemini-2.5-flash", "projects/p1"
+		);
+
+		assertEquals(
+				"integer",
+				new JsonMapper().readTree(json)
+				                .path("request").path("tools").path(0)
+				                .path("functionDeclarations").path(0)
+				                .path("parameters").path("properties")
+				                .path("ids").path("items").path("type").asString()
+		);
 	}
 }

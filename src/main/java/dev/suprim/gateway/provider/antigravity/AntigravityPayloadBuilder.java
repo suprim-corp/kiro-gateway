@@ -28,6 +28,7 @@ class AntigravityPayloadBuilder {
 	 * (32768) but answers 503 for unrelated capacity reasons, so it is not worth a special case.
 	 */
 	private static final int MAX_OUTPUT_TOKENS = 64000;
+	private static final String ARRAY_TYPE = "array";
 	private static final String CLAUDE_CODE_PROMPT_MARKER =
 			"You are Claude Code, Anthropic's official CLI for Claude.";
 	private static final String CLAUDE_CODE_DEFAULT_PROMPT_PREFIX =
@@ -313,6 +314,7 @@ class AntigravityPayloadBuilder {
 						obj.remove(field);
 					}
 				}
+				ensureArrayItems(obj);
 			}
 			for (String fieldName : List.copyOf(obj.propertyNames())) {
 				JsonNode child = obj.get(fieldName);
@@ -326,6 +328,39 @@ class AntigravityPayloadBuilder {
 			}
 		}
 		return node;
+	}
+
+	/**
+	 * Upstream rejects an array schema that carries no {@code items} — including the JSON
+	 * Schema tuple form, which describes its elements with {@code prefixItems} alone — with
+	 * a bare 400. Fill the gap from the first prefix entry that names a type so tuple-shaped
+	 * tool parameters survive the round trip.
+	 */
+	private static void ensureArrayItems(ObjectNode schema) {
+		JsonNode type = schema.get("type");
+		if (type == null || !type.isString() ||
+		    !ARRAY_TYPE.equalsIgnoreCase(type.stringValue())) {
+			return;
+		}
+		JsonNode items = schema.get("items");
+		if (items != null && items.isObject() && !items.isEmpty()) {
+			return;
+		}
+		schema.set("items", arrayItemSchema(schema.get("prefixItems")));
+	}
+
+	private static ObjectNode arrayItemSchema(JsonNode prefixItems) {
+		if (prefixItems != null && prefixItems.isArray()) {
+			for (JsonNode candidate : prefixItems) {
+				JsonNode candidateType = candidate.isObject()
+						? candidate.get("type")
+						: null;
+				if (candidateType != null && candidateType.isString()) {
+					return (ObjectNode) candidate.deepCopy();
+				}
+			}
+		}
+		return MAPPER.createObjectNode().put("type", "string");
 	}
 
 	/**
