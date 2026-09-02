@@ -46,4 +46,27 @@ class ModelRouterTest {
 	void resolveProvider_emptyString_kiro() {
 		assertEquals(Provider.KIRO, ModelRouter.resolveProvider(""));
 	}
+
+	@Test
+	void stripPrefix_dropsContextWindowHint() {
+		assertEquals(
+				"gemini-3.8-flash-high",
+				ModelRouter.stripPrefix("ag/gemini-3.8-flash-high[1m]")
+		);
+	}
+
+	@Test
+	void stripPrefix_dropsContextWindowHintWithoutPrefix() {
+		assertEquals("gemini-3.8-flash-high", ModelRouter.stripPrefix("gemini-3.8-flash-high[200k]"));
+	}
+
+	@Test
+	void stripPrefix_leavesPlainIdUntouched() {
+		assertEquals("gemini-3.8-flash-high", ModelRouter.stripPrefix("ag/gemini-3.8-flash-high"));
+	}
+
+	@Test
+	void stripPrefix_keepsBracketsThatAreNotAContextHint() {
+		assertEquals("weird[model]name", ModelRouter.stripPrefix("weird[model]name"));
+	}
 }

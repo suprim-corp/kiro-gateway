@@ -8,7 +8,14 @@ public class Antigravity {
 	public static final String GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 	public static final String GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 	public static final String OAUTH_SCOPE = "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog https://www.googleapis.com/auth/experimentsandconfigs";
-	public static final String USER_AGENT = "antigravity/ide/2.1.1 darwin/arm64";
+	/**
+	 * Identifies the client to {@code cloudcode-pa}, which serves a different model set per
+	 * client version: the IDE 2.1.1 string predates Gemini 3.8, so the backend omits the 3.7
+	 * and 3.8 tiers from {@code fetchAvailableModels} and answers
+	 * {@code streamGenerateContent} for them with 404 NOT_FOUND.
+	 */
+	public static final String USER_AGENT =
+			"antigravity/cli/1.1.24 (aidev_client; os_type=darwin; arch=arm64; cl=974782877; auth_method=consumer)";
 	public static final String REDIRECT_URI = "http://localhost:51121/oauth-callback";
 	/** Loopback port Google redirects the browser back to. */
 	public static final int LOOPBACK_PORT = 51121;

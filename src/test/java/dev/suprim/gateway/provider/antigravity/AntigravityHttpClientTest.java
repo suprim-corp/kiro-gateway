@@ -35,7 +35,12 @@ class AntigravityHttpClientTest {
 
 		assertEquals("Bearer ya29.test-token", headers.get("Authorization"));
 		assertEquals("application/json", headers.get("Content-Type"));
-		assertEquals("antigravity/ide/2.1.1 darwin/arm64", headers.get("User-Agent"));
+		// Pinned because the backend gates its model set on this string: an IDE-era agent is
+		// refused the newest models outright.
+		assertEquals(
+				"antigravity/cli/1.1.24 (aidev_client; os_type=darwin; arch=arm64; cl=974782877; auth_method=consumer)",
+				headers.get("User-Agent")
+		);
 	}
 
 	@Test

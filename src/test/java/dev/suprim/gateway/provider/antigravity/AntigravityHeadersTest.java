@@ -1,5 +1,6 @@
 package dev.suprim.gateway.provider.antigravity;
 
+import dev.suprim.gateway.instants.Antigravity;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -15,7 +16,9 @@ class AntigravityHeadersTest {
 		assertEquals("Bearer ya29.test-token", headers.get("Authorization"));
 		assertEquals("application/json", headers.get("Content-Type"));
 		assertEquals("google-cloud-sdk vscode/1.96.0", headers.get("X-Goog-Api-Client"));
-		assertTrue(headers.get("User-Agent").contains("Antigravity/2.0.1"));
+		// The control plane must report the same client version as the streaming call: an
+		// older-looking agent string is served a reduced model set.
+		assertEquals(Antigravity.USER_AGENT, headers.get("User-Agent"));
 	}
 
 	@Test

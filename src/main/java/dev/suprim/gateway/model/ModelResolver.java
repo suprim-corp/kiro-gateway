@@ -32,7 +32,24 @@ public class ModelResolver {
 			Pattern.CASE_INSENSITIVE
 	);
 
+	private static final Pattern CONTEXT_WINDOW_PATTERN = Pattern.compile(
+			"\\s*\\[\\d+[km]?]$",
+			Pattern.CASE_INSENSITIVE
+	);
+
 	private final Set<String> cachedModels = ConcurrentHashMap.newKeySet();
+
+	/**
+	 * Drops a client-supplied context-window hint such as {@code [1m]} or {@code [200k]}.
+	 * Upstreams match model ids verbatim, so leaving the hint attached turns a valid model
+	 * into an unknown one.
+	 */
+	public static String stripContextWindow(String model) {
+		if (model == null) {
+			return null;
+		}
+		return CONTEXT_WINDOW_PATTERN.matcher(model).replaceFirst("");
+	}
 
 	public void setCachedModels(java.util.List<String> models) {
 		cachedModels.clear();
@@ -72,8 +89,7 @@ public class ModelResolver {
 	private String normalize(String model) {
 		String name = model.trim().toLowerCase();
 
-		// Strip context window suffix [1m], [200k]
-		name = name.replaceAll("\\s*\\[\\d+[km]?]$", "");
+		name = stripContextWindow(name);
 
 		// Handle inverted format: claude-4.5-opus-high → claude-opus-4.5
 		Matcher invertedMatch = INVERTED_PATTERN.matcher(name);
